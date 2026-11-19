@@ -1,0 +1,22 @@
+# Secrets - never commit these
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.publish
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node / editors / OS
+node_modules/
+.vscode/
+.idea/
+.DS_Store
