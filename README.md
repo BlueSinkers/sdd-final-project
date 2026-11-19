@@ -30,8 +30,13 @@ static UI, CI/CD + Azure, monitoring + docs. Everyone must understand the whole 
 
 ## Run locally
 
-See the "Run locally" section once the skeleton lands: `docker compose up`, then
-`GET /health` on each service.
+```bash
+docker compose up --build
+curl http://localhost:8001/health   # listings
+curl http://localhost:8002/health   # swaps
+```
+
+Each returns `{"status":"ok",...}`. Each request logs one line (method, path, status, duration).
 
 ## Working agreement
 

@@ -1,0 +1,9 @@
+services:
+  listings:
+    build: ./listings
+    ports:
+      - "8001:8000"
+  swaps:
+    build: ./swaps
+    ports:
+      - "8002:8000"
