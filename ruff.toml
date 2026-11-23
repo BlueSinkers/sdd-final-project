@@ -9,3 +9,7 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM"]
 [lint.flake8-bugbear]
 # Depends(...) in an argument default is how FastAPI declares a dependency.
 extend-immutable-calls = ["fastapi.Depends"]
+
+[lint.isort]
+# Each service's own package is called "app".
+known-first-party = ["app"]

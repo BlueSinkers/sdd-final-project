@@ -31,12 +31,33 @@ static UI, CI/CD + Azure, monitoring + docs. Everyone must understand the whole 
 ## Run locally
 
 ```bash
+cp .env.example .env                # local passwords, git-ignored
 docker compose up --build
 curl http://localhost:8001/health   # listings
 curl http://localhost:8002/health   # swaps
 ```
 
-Each returns `{"status":"ok",...}`. Each request logs one line (method, path, status, duration).
+Each returns `{"status":"ok",...}`. Each request logs one line (service, method, path, status,
+duration). The first start takes about a minute: SQL Server has to be healthy before the
+services start. If a port is already in use on your machine, set `LISTINGS_PORT`, `SWAPS_PORT`
+or `SQL_PORT` in `.env`.
+
+Each service applies its own versioned migrations (`<service>/migrations/NNN_name.sql`) on
+startup. Applied files are never edited; a schema change is a new file.
+
+## Tests
+
+The tests run against a real SQL Server, never against Azure. With the compose stack up:
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt -r listings/requirements.txt
+export TEST_DATABASE_URL="mssql://sa:<SA_PASSWORD from .env>@localhost:1433/listings_test"
+(cd listings && pytest --cov=app --cov-fail-under=70)
+```
+
+The database named in `TEST_DATABASE_URL` is dropped and recreated on every run, so its name
+must end in `_test`. Lint and format: `ruff check .` and `ruff format --check .`.
 
 ## Working agreement
 
