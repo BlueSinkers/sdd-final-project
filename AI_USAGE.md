@@ -14,3 +14,4 @@ you checked or changed yourself.
 | 2026-11-23 | Serge Hagopian | Claude Code | Log Analytics queries, workbook, SLO write-up, latency tool (#21) | Latency tool run locally (300 requests). **The queries and workbook were not run in Azure when written**; see the PR |
 | 2026-11-23 | Serge Hagopian | Claude Code | README, decision records, data model, sprint files (#22) | Read against the code and the merged behaviour |
 | 2026-11-23 | Serge Hagopian | Claude Code | Review of #1 and #2 | Read both diffs; #2's claim confirmed by the CI smoke run on top of it |
+| 2026-11-23 | Serge Hagopian | Claude Code | Independent code review of the whole stack by a second AI reviewer, and the fixes that followed: fairness arithmetic in whole cents, input limits, error mapping, log-line safety, UI accept rules, SLO query, rollback and setup-script fixes | Every code fix has a test (138 tests pass); UI fixes checked in a browser; the SLO query fix could not be run in Azure |

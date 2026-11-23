@@ -4,15 +4,31 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Annotated, Self
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 from app.fairness import MAX_CONDITION, MIN_CONDITION, Verdict
 
 MAX_VALUE_EUR = 10_000
 
-Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)]
-Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
-Message = Annotated[str, StringConstraints(strip_whitespace=True, max_length=300)]
+# SQL Server's INT, used for every id.
+MAX_ID = 2_147_483_647
+
+
+def fits_column(max_units: int):
+    """NVARCHAR(n) counts UTF-16 units, so an emoji takes two. Check the length the
+    way the database will, instead of failing later with a database error."""
+
+    def check(value: str) -> str:
+        if len(value.encode("utf-16-le")) // 2 > max_units:
+            raise ValueError(f"must fit in {max_units} characters (an emoji counts as two)")
+        return value
+
+    return AfterValidator(check)
+
+
+Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40), fits_column(40)]
+Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80), fits_column(80)]
+Message = Annotated[str, StringConstraints(strip_whitespace=True, max_length=300), fits_column(300)]
 
 
 class Status(StrEnum):
@@ -29,11 +45,20 @@ class ListingSnapshot(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    listing_id: int = Field(gt=0)
+    listing_id: int = Field(gt=0, le=MAX_ID)
     title: Title
     owner_name: Name
     condition: int = Field(ge=MIN_CONDITION, le=MAX_CONDITION)
     estimated_value: float = Field(gt=0, le=MAX_VALUE_EUR)
+
+    @field_validator("estimated_value")
+    @classmethod
+    def whole_cents(cls, value: float) -> float:
+        # Same rule as the Listings service: money is stored in cents.
+        rounded = round(value, 2)
+        if rounded <= 0:
+            raise ValueError("estimated_value must be at least 0.01")
+        return rounded
 
 
 class SwapIn(BaseModel):

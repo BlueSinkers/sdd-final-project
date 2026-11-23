@@ -69,14 +69,28 @@ Each service connects with its own database user, which exists only inside its o
 Every merged commit keeps its images in GHCR. To go back:
 
 1. Actions > CD > Run workflow.
-2. Put the full commit SHA of the last good version in **image_tag** and run it.
+2. Keep the branch on `main`, put the full 40-character commit SHA of the last good version
+   in **image_tag** and run it.
 
-CD skips the build, rolls both Container Apps to those images and waits for `/health` to
-report that SHA. Then revert the bad commit with a normal PR so `main` matches production.
+CD skips the build, rolls both Container Apps to those images, waits for `/health` to
+report that SHA, and publishes the UI from that same commit. Then revert the bad commit with a normal PR so `main` matches production.
 
 Migrations only ever add (a new file per change), so an older image keeps working against a
 newer schema as long as a migration did not remove something the old code reads. A migration
 that drops or renames a column must ship one release after the code stops using it.
+
+## If the first deploy fails
+
+Neither `infra/setup.sh` nor the CD workflow had been run against Azure when they were
+written, so check these first:
+
+| Symptom | Likely cause and fix |
+|---|---|
+| `az ... create` says the provider is not registered | The subscription needs `Microsoft.App`, `Microsoft.OperationalInsights`, `Microsoft.Sql` and `Microsoft.Web` registered (`az provider register --namespace <name>`), or ask the instructor |
+| Container App cannot pull the image | The two GHCR packages are still private (step 2) |
+| Service log shows `Login failed for user` | Azure SQL can want the user as `user@server`. Set the secret to `mssql://listings_user%40<sql-server-name>:<password>@<host>:1433/listings` (`%40` is `@`) |
+| Service restarts in a loop right after an idle period | The database was still resuming while the service waited to start. Open the app URL again after a minute, or set `--min-replicas 1` for the demo |
+| CD health check times out | Run `infra/monitoring/startup_and_errors.kql` to see why the new revision did not start |
 
 ## Cold starts
 

@@ -103,7 +103,9 @@ not call each other.
 
 ## Money and time
 
-- Values are `DECIMAL(10,2)` in the database, never floating point. The API accepts a number
-  and rounds it to cents.
+- Values are `DECIMAL(10,2)` in the database, never floating point. Both APIs accept a number
+  and round it to cents, and the fairness rule does its arithmetic in whole cents.
+- Text limits are checked the way `NVARCHAR` counts (an emoji takes two units), and ids are
+  limited to the range of `INT`, so input the database would refuse is a 422, not an error.
 - Timestamps are UTC in the database and are sent with an explicit UTC offset. The browser
   shows them in local time.

@@ -24,6 +24,8 @@ set -euo pipefail
 : "${RESOURCE_GROUP:?set RESOURCE_GROUP to the resource group the class gave our group}"
 : "${PREFIX:?set PREFIX to a short unique name, e.g. thriftswap3b2}"
 LOCATION="${LOCATION:-westeurope}"
+# Static Web Apps exist in only a few regions, so this is separate from LOCATION.
+STATIC_LOCATION="${STATIC_LOCATION:-westeurope}"
 GHCR_REPO="${GHCR_REPO:-ghcr.io/bluesinkers/sdd-final-project}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 
@@ -85,6 +87,11 @@ say "Azure SQL server: $SQL_SERVER"
 if ! az sql server show --resource-group "$RESOURCE_GROUP" --name "$SQL_SERVER" --output none 2>/dev/null; then
   az sql server create --resource-group "$RESOURCE_GROUP" --name "$SQL_SERVER" --location "$LOCATION" \
     --admin-user "$SQL_ADMIN" --admin-password "$SQL_ADMIN_PASSWORD" --output none
+else
+  # The server exists already. If .env.azure was lost or this is another machine,
+  # the admin password generated above is new, so make the server match it.
+  az sql server update --resource-group "$RESOURCE_GROUP" --name "$SQL_SERVER" \
+    --admin-password "$SQL_ADMIN_PASSWORD" --output none
 fi
 # 0.0.0.0 is Azure's way of saying "other Azure services", which is how the Container Apps reach it.
 az sql server firewall-rule create --resource-group "$RESOURCE_GROUP" --server "$SQL_SERVER" \
@@ -123,14 +130,26 @@ create_user() { # database, user, password
       ALTER ROLE db_datareader ADD MEMBER [$2];
       ALTER ROLE db_datawriter ADD MEMBER [$2];"
 }
-create_user listings listings_user "$LISTINGS_DB_PASSWORD"
-create_user swaps swaps_user "$SWAPS_DB_PASSWORD"
+# A new firewall rule or admin password takes a moment to apply, and a paused
+# database needs up to a minute to resume, so try a few times before giving up.
+create_user_with_retry() {
+  local attempt
+  for attempt in 1 2 3 4 5 6; do
+    if create_user "$@"; then return 0; fi
+    echo "    database $1 not reachable yet (attempt $attempt of 6), waiting 20 s"
+    sleep 20
+  done
+  echo "could not create the database user in $1" >&2
+  return 1
+}
+create_user_with_retry listings listings_user "$LISTINGS_DB_PASSWORD"
+create_user_with_retry swaps swaps_user "$SWAPS_DB_PASSWORD"
 remove_my_ip
 trap - EXIT
 
 say "Static Web App: $STATIC_APP"
 if ! az staticwebapp show --resource-group "$RESOURCE_GROUP" --name "$STATIC_APP" --output none 2>/dev/null; then
-  az staticwebapp create --resource-group "$RESOURCE_GROUP" --name "$STATIC_APP" --location "$LOCATION" \
+  az staticwebapp create --resource-group "$RESOURCE_GROUP" --name "$STATIC_APP" --location "$STATIC_LOCATION" \
     --sku Free --output none
 fi
 UI_HOST=$(az staticwebapp show --resource-group "$RESOURCE_GROUP" --name "$STATIC_APP" \

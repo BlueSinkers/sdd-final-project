@@ -14,6 +14,7 @@ from fastapi import Request
 log = logging.getLogger("swaps.db")
 
 DatabaseError = pymssql.Error
+IntegrityError = pymssql.IntegrityError
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "migrations"
 MIGRATION_NAME = re.compile(r"^\d{3}_[a-z0-9_]+\.sql$")

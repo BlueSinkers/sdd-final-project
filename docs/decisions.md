@@ -38,7 +38,8 @@
 - **Context:** The score needs both listings' value and condition, which live in the
   Listings database. Swaps could fetch them from Listings, or the caller could send them.
 - **Decision:** The caller sends a snapshot of both listings. The Swaps service validates the
-  snapshot, computes the score and verdict itself (`fairness.py`, a pure module), and stores
+  snapshot, computes the score and verdict itself (`fairness.py`, a pure module that works in
+  whole cents and cuts the score to four decimals instead of rounding it up), and stores
   the snapshot, both adjusted values, the score and the verdict with the proposal. A caller
   can never send its own score.
 - **Consequences:** Swaps works when Listings is down, and a proposal keeps showing what was

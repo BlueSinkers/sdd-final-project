@@ -14,6 +14,7 @@
 | 8. Partial failure proven in CI (end-to-end job) | #9 | #20 |
 | 11. Health, dashboard and SLO | #12 | #21 |
 | Documentation: README, decisions, data model, sprint files | - | #22 |
+| Fixes from an independent code review of the whole stack | - | #23 |
 
 ## Increment
 

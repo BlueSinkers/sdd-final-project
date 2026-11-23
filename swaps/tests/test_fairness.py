@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.fairness import Verdict, adjusted_value, fairness_score, verdict_for
+from app.fairness import Verdict, adjusted_value, fairness_score, to_cents, verdict_for
 
 
 @pytest.mark.parametrize(
@@ -28,6 +28,19 @@ def test_adjusted_value_rejects_a_negative_value():
         adjusted_value(-0.01, 3)
 
 
+def test_adjusted_value_rounds_half_a_cent_up():
+    # 1.05 x 0.7 = 0.735 exactly; binary floating point would call it 0.73.
+    assert adjusted_value(1.05, 2) == 0.74
+    assert adjusted_value(0.01, 1) == 0.01  # 0.6 of a cent is still one cent
+
+
+@pytest.mark.parametrize(
+    ("euros", "cents"), [(0, 0), (0.01, 1), (0.005, 1), (0.004, 0), (19.99, 1999), (10_000, 1_000_000)]
+)
+def test_to_cents(euros, cents):
+    assert to_cents(euros) == cents
+
+
 def test_equal_values_score_one():
     assert fairness_score(42.5, 42.5) == 1.0
 
@@ -39,6 +52,22 @@ def test_score_is_the_smaller_value_over_the_larger():
 
 def test_score_does_not_depend_on_which_side_is_offered():
     assert fairness_score(18, 31.5) == fairness_score(31.5, 18)
+
+
+@pytest.mark.parametrize(
+    ("smaller", "larger", "score", "verdict"),
+    [
+        (8000.00, 10000.00, 0.8, Verdict.fair),
+        (7999.99, 10000.00, 0.7999, Verdict.lopsided),
+        (7999.60, 10000.00, 0.7999, Verdict.lopsided),  # 0.79996 must not round up to fair
+        (5000.00, 10000.00, 0.5, Verdict.lopsided),
+        (4999.60, 10000.00, 0.4999, Verdict.very_uneven),  # 0.49996 must not round up
+        (18.00, 22.50, 0.8, Verdict.fair),
+    ],
+)
+def test_score_is_cut_not_rounded_at_the_boundaries(smaller, larger, score, verdict):
+    assert fairness_score(smaller, larger) == score
+    assert verdict_for(fairness_score(larger, smaller)) is verdict
 
 
 def test_two_worthless_items_are_an_even_trade():

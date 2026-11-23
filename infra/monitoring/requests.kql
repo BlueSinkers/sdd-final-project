@@ -1,7 +1,8 @@
 // Shared starting point: one row per HTTP request, parsed from the single log
 // line each service writes:
 //   service=swaps method=POST path=/swaps status=201 duration_ms=12.3
-// Paste this first, then add one of the other queries below it.
+// The other queries in this folder are complete on their own; start from this
+// one when you want to ask something new.
 ContainerAppConsoleLogs_CL
 | where Log_s startswith "service="
 | parse Log_s with "service=" service " method=" method " path=" path " status=" status:int " duration_ms=" duration_ms:real
