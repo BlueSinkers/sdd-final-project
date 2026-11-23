@@ -10,6 +10,7 @@ The services never call each other, so each one has to keep working alone.
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -38,6 +39,20 @@ def is_down(url: str) -> bool:
     except OSError:
         return True
     return False
+
+
+def wait_until_up(base_url: str, seconds: int = 90) -> None:
+    """A service that was just started needs a moment to apply its migrations."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(f"{base_url}/health", timeout=3) as response:
+                if response.status == 200:
+                    return
+        except OSError:
+            pass
+        time.sleep(1)
+    sys.exit(f"FAIL {base_url}/health did not answer 200 within {seconds} s")
 
 
 def expect(condition: bool, what: str) -> None:
@@ -83,6 +98,8 @@ def propose(offered: dict, requested: dict) -> dict:
 
 
 def flow() -> None:
+    wait_until_up(LISTINGS)
+    wait_until_up(SWAPS)
     jacket = post_listing("e2e jacket", 4, 35, "Lucia")  # 35 x 0.9 = 31.50
     lamp = post_listing("e2e lamp", 5, 18, "Chen")  # 18 x 1.0 = 18.00
     swap = propose(jacket, lamp)
@@ -108,6 +125,7 @@ def flow() -> None:
 
 def swaps_down() -> None:
     expect(is_down(f"{SWAPS}/health"), "Swaps is not reachable")
+    wait_until_up(LISTINGS)
     status, body = call("GET", f"{LISTINGS}/health")
     expect(status == 200 and body["status"] == "ok", "Listings /health is still ok")
     status, _ = call("GET", f"{LISTINGS}/listings")
@@ -119,6 +137,7 @@ def swaps_down() -> None:
 
 def listings_down() -> None:
     expect(is_down(f"{LISTINGS}/health"), "Listings is not reachable")
+    wait_until_up(SWAPS)
     status, body = call("GET", f"{SWAPS}/health")
     expect(status == 200 and body["status"] == "ok", "Swaps /health is still ok")
     book = {"id": 9001, "title": "e2e book", "owner_name": "Omar", "condition": 3, "estimated_value": 40}
