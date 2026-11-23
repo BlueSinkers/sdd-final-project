@@ -13,8 +13,11 @@ When someone proposes a swap, the app tells them how fair the trade is:
 | Abhiram Kidambi | @BlueSinkers | Sprint 0 setup, project docs, reviews |
 | Serge Hagopian | @SergeGod | Listings, Swaps, UI, CI/CD, monitoring |
 
+_Add every other team member here with their GitHub username._
+
 Scrum roles (Product Owner and Scrum Master) rotate each sprint. The holders and the
-outcome of each sprint are in [`docs/scrum/`](docs/scrum/). Everyone must understand the
+outcome of each sprint are in [`docs/scrum/`](docs/scrum/). The backlog is the GitHub
+Project of this repository. Everyone must understand the
 whole system.
 
 ## Architecture
@@ -136,14 +139,30 @@ python tests/e2e/flow.py flow       # end to end against the running stack
 The database named in `TEST_DATABASE_URL` is dropped and recreated on every run, so its name
 must end in `_test`. Lint and format: `ruff check .` and `ruff format --check .`.
 
-CI runs all of this on every pull request, with a 70% coverage gate (both services are
-at 99%).
+CI runs all of this on every push and pull request, with a 70% coverage gate (both
+services are at 99%), plus a dependency audit (`pip-audit`) and a static security scan
+(`bandit`).
+
+## Reproduce the Azure setup
+
+Everything on Azure is created by one re-runnable Azure CLI script, in our group's existing
+resource group and named with our group prefix:
+
+```bash
+az login
+PREFIX=sdd-<class>-g<N> ./infra/setup.sh
+```
+
+It creates the Log Analytics workspace, the Container Apps environment, the SQL server with
+one serverless database per service, both Container Apps (scale 0 to 1) and the Static Web
+App, then prints the GitHub variables and secrets to set. Nothing is changed by hand after
+that. The full steps are in [`docs/deploy.md`](docs/deploy.md).
 
 ## Deploy, monitoring and the SLO
 
 - Every merge to `main` is built, pushed to GHCR and deployed to Azure Container Apps by
-  GitHub Actions, then checked with `GET /health`. Setup, secrets and rollback:
-  [`docs/deploy.md`](docs/deploy.md).
+  GitHub Actions, checked with `GET /health`, and smoke-tested from its public URLs.
+  Secrets and rollback: [`docs/deploy.md`](docs/deploy.md).
 - Request count, error rate and response time come from Log Analytics. Queries and the
   dashboard: [`docs/monitoring.md`](docs/monitoring.md).
 - **SLO: 99% of `POST /swaps` requests complete in under 500 ms, measured over 7 days.**
@@ -153,17 +172,17 @@ at 99%).
 | Document | What it covers |
 |---|---|
 | [`docs/product-backlog.md`](docs/product-backlog.md) | User stories with acceptance criteria |
-| [`docs/definition-of-done.md`](docs/definition-of-done.md) | When a backlog item counts as Done |
+| [`docs/scrum/definition-of-done.md`](docs/scrum/definition-of-done.md) | When a backlog item counts as Done |
 | [`docs/decisions.md`](docs/decisions.md) | Architecture decision records |
 | [`docs/data-model.md`](docs/data-model.md) | Tables, constraints and why swaps store snapshots |
 | [`docs/deploy.md`](docs/deploy.md) | Pipeline, Azure setup, secrets, rollback, cold starts |
 | [`docs/monitoring.md`](docs/monitoring.md) | Logs, queries, dashboard, SLO |
-| [`docs/scrum/`](docs/scrum/) | Sprint goals, roles and outcomes |
+| [`docs/scrum/`](docs/scrum/) | One file per sprint: goal, items, review, retrospective |
 | [`AI_USAGE.md`](AI_USAGE.md) | What AI tools were used for and how the work was checked |
 
 ## Working agreement
 
 - No direct pushes to `main`. Every change goes through a PR approved by a teammate.
 - No secrets in the repo, ever. Use `.env` (git-ignored) locally and GitHub secrets in CI.
-- Done means what [`docs/definition-of-done.md`](docs/definition-of-done.md) says.
+- Done means what [`docs/scrum/definition-of-done.md`](docs/scrum/definition-of-done.md) says.
 - Log AI-assisted work in [`AI_USAGE.md`](AI_USAGE.md).

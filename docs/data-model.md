@@ -73,7 +73,7 @@ Defined in [`swaps/migrations/001_create_swaps.sql`](../swaps/migrations/001_cre
 The alternative is to store only the two listing ids and look the listings up when needed.
 We store a copy instead because:
 
-1. **Independence.** Swaps can score and show proposals while Listings is down (ADR-1, ADR-4).
+1. **Independence.** Swaps can score and show proposals while Listings is down (ADR-1, ADR-3).
 2. **A proposal is a record of a moment.** The verdict was computed from specific values.
    If the owner later changes the value from 35 to 60 euros, the stored verdict should still
    match the numbers shown next to it.

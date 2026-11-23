@@ -2,35 +2,40 @@
 # Creates everything the app needs on Azure, once. Safe to run again: every step
 # either creates the resource or leaves the existing one alone.
 #
-#   az login                       # or: az login --service-principal ... (the group's)
-#   export RESOURCE_GROUP=<the resource group the class gave our group>
-#   export PREFIX=<short unique name, lower case letters and digits, e.g. thriftswap3b2>
+#   az login                       # your IE account has Contributor on the group's resource group
+#   export PREFIX=sdd-<class>-g<N> # our group prefix, e.g. sdd-3a-g3
 #   ./infra/setup.sh
+#
+# Every resource name starts with the group prefix, and everything goes into the
+# group's existing resource group rg-<PREFIX> (override with RESOURCE_GROUP). The
+# script never creates a resource group.
 #
 # Needs: az CLI, docker (to run sqlcmd), openssl. The images must already be in
 # GHCR and public (see docs/deploy.md), because the Container Apps pull them.
 #
-# What it creates in $RESOURCE_GROUP:
-#   - a Log Analytics workspace and a Container Apps environment that logs to it
-#   - one Azure SQL server with two serverless databases (listings, swaps), each
-#     with its own database user that cannot see the other database
-#   - two Container Apps (scale to zero, at most 1 replica)
-#   - one Static Web App for the UI
+# What it creates in the resource group:
+#   - <PREFIX>-logs  Log Analytics workspace
+#   - <PREFIX>-env   Container Apps environment (Consumption) that logs to it
+#   - <PREFIX>-sql   Azure SQL server with two serverless, auto-pausing databases,
+#                    <PREFIX>-listings-db and <PREFIX>-swaps-db, each with its own
+#                    database user that cannot see the other database
+#   - <PREFIX>-listings and <PREFIX>-swaps  Container Apps (scale to zero, at most 1 replica)
+#   - <PREFIX>-ui    Static Web App for the UI
 #
 # Passwords are generated here, stored only as Container App secrets and in
 # .env.azure (git-ignored, readable only by you). Nothing secret is printed.
 set -euo pipefail
 
-: "${RESOURCE_GROUP:?set RESOURCE_GROUP to the resource group the class gave our group}"
-: "${PREFIX:?set PREFIX to a short unique name, e.g. thriftswap3b2}"
+: "${PREFIX:?set PREFIX to the group prefix sdd-<class>-g<N>, e.g. sdd-3a-g3}"
+RESOURCE_GROUP="${RESOURCE_GROUP:-rg-${PREFIX}}"
 LOCATION="${LOCATION:-westeurope}"
 # Static Web Apps exist in only a few regions, so this is separate from LOCATION.
 STATIC_LOCATION="${STATIC_LOCATION:-westeurope}"
 GHCR_REPO="${GHCR_REPO:-ghcr.io/bluesinkers/sdd-final-project}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 
-if ! [[ "$PREFIX" =~ ^[a-z][a-z0-9]{2,19}$ ]]; then
-  echo "PREFIX must be 3-20 lower case letters and digits, starting with a letter" >&2
+if ! [[ "$PREFIX" =~ ^sdd-[a-z0-9]+-g[0-9]+$ ]]; then
+  echo "PREFIX must be the group prefix sdd-<class>-g<N>, e.g. sdd-3a-g3" >&2
   exit 1
 fi
 
@@ -41,6 +46,8 @@ SQL_HOST="${SQL_SERVER}.database.windows.net"
 SQL_ADMIN="thriftadmin"
 LISTINGS_APP="${PREFIX}-listings"
 SWAPS_APP="${PREFIX}-swaps"
+LISTINGS_DB="${PREFIX}-listings-db"
+SWAPS_DB="${PREFIX}-swaps-db"
 STATIC_APP="${PREFIX}-ui"
 SECRETS_FILE="$(cd "$(dirname "$0")/.." && pwd)/.env.azure"
 
@@ -97,7 +104,7 @@ fi
 az sql server firewall-rule create --resource-group "$RESOURCE_GROUP" --server "$SQL_SERVER" \
   --name AllowAzureServices --start-ip-address 0.0.0.0 --end-ip-address 0.0.0.0 --output none
 
-for DATABASE in listings swaps; do
+for DATABASE in "$LISTINGS_DB" "$SWAPS_DB"; do
   say "Serverless database: $DATABASE"
   if ! az sql db show --resource-group "$RESOURCE_GROUP" --server "$SQL_SERVER" --name "$DATABASE" --output none 2>/dev/null; then
     # Serverless with auto-pause after 60 idle minutes: it costs nothing while paused.
@@ -142,8 +149,8 @@ create_user_with_retry() {
   echo "could not create the database user in $1" >&2
   return 1
 }
-create_user_with_retry listings listings_user "$LISTINGS_DB_PASSWORD"
-create_user_with_retry swaps swaps_user "$SWAPS_DB_PASSWORD"
+create_user_with_retry "$LISTINGS_DB" listings_user "$LISTINGS_DB_PASSWORD"
+create_user_with_retry "$SWAPS_DB" swaps_user "$SWAPS_DB_PASSWORD"
 remove_my_ip
 trap - EXIT
 
@@ -173,8 +180,8 @@ create_app() { # app name, service, database, user, password
       --env-vars "DATABASE_URL=secretref:database-url" "CORS_ORIGINS=https://${UI_HOST}" --output none
   fi
 }
-create_app "$LISTINGS_APP" listings listings listings_user "$LISTINGS_DB_PASSWORD"
-create_app "$SWAPS_APP" swaps swaps swaps_user "$SWAPS_DB_PASSWORD"
+create_app "$LISTINGS_APP" listings "$LISTINGS_DB" listings_user "$LISTINGS_DB_PASSWORD"
+create_app "$SWAPS_APP" swaps "$SWAPS_DB" swaps_user "$SWAPS_DB_PASSWORD"
 
 fqdn() {
   az containerapp show --resource-group "$RESOURCE_GROUP" --name "$1" \
@@ -196,9 +203,11 @@ the CD workflow once so it publishes the UI:
     AZURE_RESOURCE_GROUP = $RESOURCE_GROUP
     LISTINGS_APP         = $LISTINGS_APP
     SWAPS_APP            = $SWAPS_APP
+    STATIC_APP           = $STATIC_APP
 
   Secrets
-    AZURE_CREDENTIALS               = the JSON of the group's service principal
+    AZURE_CREDENTIALS               = the JSON of our group's own service principal (sent by the
+                                      professor; not the class one from Assignment 2)
     AZURE_STATIC_WEB_APPS_API_TOKEN = the output of:
       az staticwebapp secrets list --resource-group $RESOURCE_GROUP --name $STATIC_APP --query properties.apiKey --output tsv
 
