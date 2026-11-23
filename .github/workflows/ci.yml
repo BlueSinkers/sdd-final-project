@@ -38,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [listings]
+        service: [listings, swaps]
     defaults:
       run:
         working-directory: ${{ matrix.service }}
