@@ -1,0 +1,17 @@
+// The SLO: 99% of POST /swaps requests complete in under 500 ms, over 7 days.
+// A request counts as good when it answered in under 500 ms and did not fail on our side.
+let target = 99.0;
+let threshold_ms = 500;
+ContainerAppConsoleLogs_CL
+| where TimeGenerated > ago(7d)
+| where Log_s startswith "service=swaps "
+| parse Log_s with "service=" service " method=" method " path=" path " status=" status:int " duration_ms=" duration_ms:real
+| where method == "POST" and path == "/swaps"
+| summarize total = count(), good = countif(duration_ms < threshold_ms and status < 500),
+    p50_ms = round(percentile(duration_ms, 50), 1), p99_ms = round(percentile(duration_ms, 99), 1)
+| extend achieved_percent = round(100.0 * good / total, 3)
+| extend slo_met = achieved_percent >= target
+// How many slow or failed requests the target still allows this week, and how many are left.
+| extend error_budget = toint(floor(total * (100.0 - target) / 100.0))
+| extend budget_left = error_budget - (total - good)
+| project total, good, achieved_percent, target, slo_met, p50_ms, p99_ms, error_budget, budget_left

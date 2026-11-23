@@ -1,0 +1,154 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# Thrift-Swap Board\nRequest count, error rate and response time for both services, and the SLO for `POST /swaps`. Every chart is built from the one log line each service writes per request."
+      },
+      "name": "intro"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "b6f1c1f0-5a7e-4d0e-9a51-0c7e1d2f3a41",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "label": "Time range",
+            "type": 4,
+            "isRequired": true,
+            "value": {
+              "durationMs": 86400000
+            },
+            "typeSettings": {
+              "selectableValues": [
+                {
+                  "durationMs": 3600000
+                },
+                {
+                  "durationMs": 14400000
+                },
+                {
+                  "durationMs": 86400000
+                },
+                {
+                  "durationMs": 259200000
+                },
+                {
+                  "durationMs": 604800000
+                }
+              ]
+            }
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let target = 99.0;\nlet threshold_ms = 500;\nContainerAppConsoleLogs_CL\n| where TimeGenerated > ago(7d)\n| where Log_s startswith \"service=swaps \"\n| parse Log_s with \"service=\" service \" method=\" method \" path=\" path \" status=\" status:int \" duration_ms=\" duration_ms:real\n| where method == \"POST\" and path == \"/swaps\"\n| summarize total = count(), good = countif(duration_ms < threshold_ms and status < 500),\n    p50_ms = round(percentile(duration_ms, 50), 1), p99_ms = round(percentile(duration_ms, 99), 1)\n| extend achieved_percent = round(100.0 * good / total, 3)\n| extend slo_met = achieved_percent >= target\n| extend error_budget = toint(floor(total * (100.0 - target) / 100.0))\n| extend budget_left = error_budget - (total - good)\n| project total, good, achieved_percent, target, slo_met, p50_ms, p99_ms, error_budget, budget_left",
+        "size": 4,
+        "title": "SLO: 99% of POST /swaps under 500 ms (last 7 days)",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table"
+      },
+      "name": "SLO: 99% of POST /swaps under 500 ms (last 7 days)"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ContainerAppConsoleLogs_CL\n| where Log_s startswith \"service=\"\n| parse Log_s with \"service=\" service \" method=\" method \" path=\" path \" status=\" status:int \" duration_ms=\" duration_ms:real\n| where isnotnull(status) and path != \"/health\"\n| summarize requests = count() by service, bin(TimeGenerated, 5m)",
+        "size": 0,
+        "title": "Requests per service",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "timechart"
+      },
+      "name": "Requests per service",
+      "customWidth": "50",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ContainerAppConsoleLogs_CL\n| where Log_s startswith \"service=\"\n| parse Log_s with \"service=\" service \" method=\" method \" path=\" path \" status=\" status:int \" duration_ms=\" duration_ms:real\n| where isnotnull(status) and path != \"/health\"\n| summarize requests = count(), errors = countif(status >= 500) by service, bin(TimeGenerated, 5m)\n| extend error_rate_percent = round(100.0 * errors / requests, 2)\n| project TimeGenerated, service, error_rate_percent",
+        "size": 0,
+        "title": "Error rate (5xx, %)",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "timechart"
+      },
+      "name": "Error rate (5xx, %)",
+      "customWidth": "50",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ContainerAppConsoleLogs_CL\n| where Log_s startswith \"service=\"\n| parse Log_s with \"service=\" service \" method=\" method \" path=\" path \" status=\" status:int \" duration_ms=\" duration_ms:real\n| where isnotnull(status) and path != \"/health\"\n| summarize p50_ms = percentile(duration_ms, 50), p95_ms = percentile(duration_ms, 95), p99_ms = percentile(duration_ms, 99)\n    by service, bin(TimeGenerated, 5m)",
+        "size": 0,
+        "title": "Response time (ms)",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "timechart"
+      },
+      "name": "Response time (ms)",
+      "customWidth": "50",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let threshold_ms = 500;\nContainerAppConsoleLogs_CL\n| where TimeGenerated > ago(7d)\n| where Log_s startswith \"service=swaps \"\n| parse Log_s with \"service=\" service \" method=\" method \" path=\" path \" status=\" status:int \" duration_ms=\" duration_ms:real\n| where method == \"POST\" and path == \"/swaps\"\n| summarize total = count(), good = countif(duration_ms < threshold_ms and status < 500) by day = bin(TimeGenerated, 1d)\n| extend achieved_percent = round(100.0 * good / total, 3)\n| order by day asc",
+        "size": 4,
+        "title": "SLO per day",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table"
+      },
+      "name": "SLO per day",
+      "customWidth": "50",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ContainerAppConsoleLogs_CL\n| where Log_s startswith \"service=\"\n| parse Log_s with \"service=\" service \" method=\" method \" path=\" path \" status=\" status:int \" duration_ms=\" duration_ms:real\n| where isnotnull(status) and path != \"/health\"\n| extend endpoint = strcat(method, \" \", replace_regex(path, @\"/\\d+\", \"/{id}\"))\n| summarize requests = count(), errors_5xx = countif(status >= 500), rejected_4xx = countif(status between (400 .. 499)),\n    p95_ms = round(percentile(duration_ms, 95), 1), max_ms = round(max(duration_ms), 1) by service, endpoint\n| order by errors_5xx desc, p95_ms desc",
+        "size": 0,
+        "title": "Endpoints: volume, failures, slowness",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table"
+      },
+      "name": "Endpoints: volume, failures, slowness"
+    }
+  ],
+  "fallbackResourceIds": [],
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

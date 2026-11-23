@@ -1,0 +1,88 @@
+# Monitoring and the SLO
+
+## What we log
+
+Each service writes exactly one line per HTTP request to standard output:
+
+```
+service=swaps method=POST path=/swaps status=201 duration_ms=13.2
+```
+
+`duration_ms` is the time the service spent on the request, measured in the request
+middleware (`app/main.py`). Uvicorn's own access log is switched off in the image so there is
+one line per request, not two. Startup, migrations, database retries and errors are logged as
+ordinary lines; a stack trace goes to the log and never to the caller.
+
+On Azure, Container Apps sends everything written to standard output to the Log Analytics
+workspace created by `infra/setup.sh`. The lines land in the table
+`ContainerAppConsoleLogs_CL`, with the text in `Log_s` and the app name in
+`ContainerAppName_s`. New lines show up after one to five minutes.
+
+## Queries
+
+All queries are in [`infra/monitoring/`](../infra/monitoring/). Open the workspace in the
+Azure portal, choose **Logs**, paste a query and run it.
+
+| File | Answers |
+|---|---|
+| `requests.kql` | The parsed request rows, as a starting point for any new question |
+| `request_count.kql` | How many requests does each service get? |
+| `error_rate.kql` | What share of requests fail on our side (5xx)? |
+| `response_time.kql` | How fast are we: p50, p95, p99? |
+| `slo_swaps.kql` | Did we meet the SLO over the last 7 days, and how much error budget is left? |
+| `slo_swaps_daily.kql` | On which days was the SLO missed? |
+| `slowest_and_failing.kql` | Which endpoints are slow or failing? |
+| `startup_and_errors.kql` | What happened at startup, and what errors were logged? |
+
+A 4xx answer (a validation error, an unknown id) is the caller's mistake and does not count
+as an error. Requests to `/health` are left out of the charts so the deploy check and the
+UI's retries do not inflate the numbers.
+
+## Dashboard
+
+[`infra/monitoring/workbook.json`](../infra/monitoring/workbook.json) is an Azure Monitor
+workbook with the SLO result at the top, then request count, error rate and response time per
+service, the SLO per day, and a table of endpoints.
+
+To install it: Azure portal > the Log Analytics workspace > **Workbooks** > **New** > the
+**Advanced Editor** button (`</>`) > paste the file's contents > **Apply** > **Save**. Pick the
+time range with the pills at the top.
+
+## The SLO
+
+> **99% of `POST /swaps` requests complete in under 500 ms, measured over 7 days.**
+
+- **Why this request:** proposing a swap is the feature beyond CRUD; it is the one request a
+  user waits on to learn something.
+- **Indicator:** from the request log line, the share of `POST /swaps` requests with
+  `duration_ms < 500` and a status below 500.
+- **Measured by:** `slo_swaps.kql`, which also reports the error budget. At 99%, 1 in 100
+  requests may be slow or fail; with 1,000 proposals in a week that is 10 requests.
+- **What it does not cover:** the time a request waits before it reaches the service. Both
+  Container Apps scale to zero, so the first request after an idle period waits for a
+  container to start, and that wait is not in `duration_ms`. We chose this on purpose and
+  wrote down why in ADR-6 ([`decisions.md`](decisions.md)).
+
+### If the SLO is at risk
+
+1. Run `slowest_and_failing.kql`: is it slowness or errors, and on which endpoint?
+2. Run `startup_and_errors.kql`: database retries mean the database was resuming from a
+   pause; a stack trace means a bug.
+3. If a deploy caused it, roll back (see [`deploy.md`](deploy.md)).
+4. If the error budget for the week is gone, stop shipping features and fix reliability first.
+
+## Producing traffic and a second opinion
+
+`tools/latency_check.py` sends `POST /swaps` requests one after another and prints the
+percentiles and the share under 500 ms, measured from the caller's side (so it includes the
+network and any cold start):
+
+```bash
+python tools/latency_check.py                        # local compose stack, 200 requests
+python tools/latency_check.py https://<swaps-app>    # the deployed service
+```
+
+Measured locally on 23 Nov 2026 (service run from source on a laptop, SQL Server 2022 in
+Docker, 300 requests): p50 16 ms, p95 27 ms, p99 50 ms, max 187 ms, 300 of 300 under 500 ms.
+Local numbers only show the code is nowhere near the limit; the SLO itself is judged on the
+deployed service with `slo_swaps.kql`.

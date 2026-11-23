@@ -17,4 +17,5 @@ RUN useradd --system --uid 10001 appuser
 USER appuser
 
 EXPOSE 8000
-CMD ["uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+# --no-access-log: the app writes its own single line per request (see app/main.py).
+CMD ["uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
