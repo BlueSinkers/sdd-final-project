@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 
 from app import db
 from app.config import Settings, load_settings
+from app.routes import router
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 log = logging.getLogger("listings")
@@ -27,12 +28,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="listings service", version=settings.version, lifespan=lifespan)
     app.state.settings = settings
+    app.include_router(router)
 
     @app.exception_handler(db.DatabaseError)
     async def database_unavailable(request: Request, error: Exception):
         # The cause goes to the log; the caller gets a clean message, never a stack trace.
         log.error("database error on %s %s: %s", request.method, request.url.path, error)
         return JSONResponse(status_code=503, content={"detail": "The listings database is unavailable."})
+
+    @app.exception_handler(Exception)
+    async def unexpected_error(request: Request, error: Exception):
+        log.exception("unexpected error on %s %s", request.method, request.url.path)
+        return JSONResponse(status_code=500, content={"detail": "Something went wrong on our side."})
 
     @app.middleware("http")
     async def log_requests(request: Request, call_next):
