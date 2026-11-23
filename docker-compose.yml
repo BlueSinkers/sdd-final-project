@@ -51,6 +51,11 @@ services:
 
   swaps:
     build: ./swaps
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: mssql://swaps_user:${SWAPS_DB_PASSWORD}@sqlserver:1433/swaps
     ports:
       - "${SWAPS_PORT:-8002}:8000"
 

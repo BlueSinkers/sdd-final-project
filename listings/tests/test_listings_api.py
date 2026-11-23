@@ -1,8 +1,11 @@
 """The listings endpoints end to end: HTTP in, SQL Server underneath."""
 
 import pytest
+from fastapi.testclient import TestClient
 
 from app import db, repository
+from app.config import Settings
+from app.main import create_app
 
 JACKET = {
     "title": "Denim jacket",
@@ -156,11 +159,6 @@ def test_database_failure_is_a_clean_503(client, monkeypatch):
 
 
 def test_unexpected_error_is_a_500_without_a_stack_trace(database_url, conn, monkeypatch):
-    from fastapi.testclient import TestClient
-
-    from app.config import Settings
-    from app.main import create_app
-
     def explode(*args, **kwargs):
         raise RuntimeError("boom: internal detail")
 

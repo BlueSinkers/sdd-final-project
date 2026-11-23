@@ -51,9 +51,10 @@ The tests run against a real SQL Server, never against Azure. With the compose s
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements-dev.txt -r listings/requirements.txt
-export TEST_DATABASE_URL="mssql://sa:<SA_PASSWORD from .env>@localhost:1433/listings_test"
-(cd listings && pytest --cov=app --cov-fail-under=70)
+pip install -r requirements-dev.txt -r listings/requirements.txt -r swaps/requirements.txt
+SA="mssql://sa:<SA_PASSWORD from .env>@localhost:1433"
+(cd listings && TEST_DATABASE_URL="$SA/listings_test" pytest --cov=app --cov-fail-under=70)
+(cd swaps && TEST_DATABASE_URL="$SA/swaps_test" pytest --cov=app --cov-fail-under=70)
 ```
 
 The database named in `TEST_DATABASE_URL` is dropped and recreated on every run, so its name
