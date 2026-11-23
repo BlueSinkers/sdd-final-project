@@ -2,5 +2,7 @@
 // down never stops the rest of the page from working.
 
 import { initListings } from "./listings.js";
+import { initSwaps } from "./swaps.js";
 
+initSwaps();
 initListings();

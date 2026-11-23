@@ -16,6 +16,7 @@
         </div>
         <ul class="service-status" aria-label="Service status">
           <li id="status-listings" class="pill pill-unknown" role="status">Listings: checking</li>
+          <li id="status-swaps" class="pill pill-unknown" role="status">Swap checker: checking</li>
         </ul>
       </div>
     </header>
@@ -35,6 +36,17 @@
         </div>
         <div id="listings-message" aria-live="polite"></div>
         <ul id="listings" class="cards"></ul>
+      </section>
+
+      <section aria-labelledby="swaps-title">
+        <div class="section-head">
+          <h2 id="swaps-title">Swap proposals</h2>
+        </div>
+        <p class="section-note">
+          Every proposal gets a fairness check: each item's value is adjusted for its condition, then the two are compared.
+        </p>
+        <div id="swaps-message" aria-live="polite"></div>
+        <ul id="swaps" class="swaps"></ul>
       </section>
     </main>
 
@@ -75,6 +87,31 @@
           <button id="listing-submit" class="btn btn-primary" type="submit">Post listing</button>
         </div>
       </form>
+    </dialog>
+
+    <dialog id="swap-dialog" aria-labelledby="swap-dialog-title">
+      <form id="swap-form">
+        <h2 id="swap-dialog-title">Propose a swap</h2>
+        <p class="wanted">You want: <strong id="swap-requested"></strong></p>
+        <label>
+          What you offer
+          <select name="offered" required></select>
+        </label>
+        <label>
+          Your name
+          <input name="proposer_name" required maxlength="40" autocomplete="given-name" />
+        </label>
+        <label>
+          <span>Message <span class="hint">(optional)</span></span>
+          <textarea name="message" maxlength="300" rows="2" placeholder="Swap on campus on Friday?"></textarea>
+        </label>
+        <p id="swap-form-error" class="form-error" role="alert"></p>
+        <div class="dialog-actions">
+          <button id="swap-cancel" class="btn" type="button">Cancel</button>
+          <button id="swap-submit" class="btn btn-primary" type="submit">Check fairness and propose</button>
+        </div>
+      </form>
+      <div id="swap-result" class="swap-result" hidden></div>
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>

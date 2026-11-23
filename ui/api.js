@@ -76,3 +76,10 @@ export const listingsApi = {
   setStatus: (id, status) => request(LISTINGS_URL, `/listings/${id}/status`, { method: "PATCH", body: { status } }),
   remove: (id) => request(LISTINGS_URL, `/listings/${id}`, { method: "DELETE" }),
 };
+
+export const swapsApi = {
+  health: () => request(SWAPS_URL, "/health"),
+  list: () => request(SWAPS_URL, "/swaps?limit=20"),
+  propose: (proposal) => request(SWAPS_URL, "/swaps", { method: "POST", body: proposal }),
+  decide: (id, status) => request(SWAPS_URL, `/swaps/${id}/status`, { method: "PATCH", body: { status } }),
+};

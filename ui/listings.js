@@ -27,18 +27,11 @@ const dialog = document.getElementById("listing-dialog");
 const form = document.getElementById("listing-form");
 const formError = document.getElementById("listing-form-error");
 
-// Other parts of the page (the swap panel) can add buttons to each card and
-// hear about changes, without this module knowing about them.
+// Other parts of the page (the swap panel) can add a button to each card
+// without this module knowing about them.
 const cardActions = [];
-const changeListeners = [];
 export const addCardAction = (build) => cardActions.push(build);
-export const onListingsChange = (listener) => changeListeners.push(listener);
 export const getListings = () => state.listings;
-export const listingsAvailable = () => state.loaded && state.error === null;
-
-function notifyChange() {
-  for (const listener of changeListeners) listener(state.listings);
-}
 
 export async function loadListings() {
   clearTimeout(state.retryTimer);
@@ -54,8 +47,7 @@ export async function loadListings() {
     // Keep trying quietly: a service that was asleep answers after a few seconds.
     state.retryTimer = setTimeout(loadListings, RETRY_MS);
   }
-  render();
-  notifyChange();
+  renderListings();
 }
 
 function conditionDots(condition) {
@@ -99,7 +91,7 @@ function card(listing) {
   );
 }
 
-function render() {
+export function renderListings() {
   clear(message);
   if (state.error) {
     message.append(
@@ -220,8 +212,8 @@ export function initListings() {
   for (const [value, label] of Object.entries(CONDITION_LABELS)) {
     form.elements.condition.append(el("option", { value, text: `${value} - ${label}` }));
   }
-  categoryFilter.addEventListener("change", render);
-  swappedFilter.addEventListener("change", render);
+  categoryFilter.addEventListener("change", renderListings);
+  swappedFilter.addEventListener("change", renderListings);
   document.getElementById("new-listing").addEventListener("click", () => openDialog());
   document.getElementById("listing-cancel").addEventListener("click", () => dialog.close());
   form.addEventListener("submit", submit);
