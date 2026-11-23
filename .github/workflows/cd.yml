@@ -1,0 +1,154 @@
+name: CD
+
+# On every merge to main: run CI, push both images to GHCR tagged with the
+# commit, roll both Container Apps to that tag, publish the UI, then check
+# /health on what was deployed.
+#
+# Run it by hand (Actions > CD > Run workflow) with an older commit SHA to roll
+# back: the images for every merged commit stay in GHCR.
+#
+# The deploy jobs are skipped until the repository variable AZURE_RESOURCE_GROUP
+# is set, so main stays green before Azure is set up. See docs/deploy.md.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Commit SHA of an image already in GHCR to deploy (leave empty to build this commit)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false # never stop a deploy halfway
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  ci:
+    if: inputs.image_tag == ''
+    uses: ./.github/workflows/ci.yml
+
+  images:
+    name: push image (${{ matrix.service }})
+    needs: ci
+    if: inputs.image_tag == ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service: [listings, swaps]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Image name (GHCR needs lower case)
+        run: echo "IMAGE=${REGISTRY}/${GITHUB_REPOSITORY,,}-${{ matrix.service }}" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.service }}
+          push: true
+          build-args: GIT_SHA=${{ github.sha }}
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  deploy-services:
+    name: deploy ${{ matrix.service }}
+    needs: images
+    # Runs after a fresh build, or directly on a manual rollback (images skipped).
+    if: ${{ !cancelled() && !failure() && vars.AZURE_RESOURCE_GROUP != '' }}
+    runs-on: ubuntu-latest
+    environment: production
+    strategy:
+      max-parallel: 1
+      matrix:
+        include:
+          - service: listings
+            app: ${{ vars.LISTINGS_APP }}
+          - service: swaps
+            app: ${{ vars.SWAPS_APP }}
+    steps:
+      - name: Image to deploy
+        run: |
+          TAG="${{ inputs.image_tag || github.sha }}"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "IMAGE=${REGISTRY}/${GITHUB_REPOSITORY,,}-${{ matrix.service }}:$TAG" >> "$GITHUB_ENV"
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Roll the Container App to the new image
+        run: |
+          az containerapp update \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "${{ matrix.app }}" \
+            --image "$IMAGE" \
+            --output none
+      - name: /health answers 200 and reports the deployed commit
+        run: |
+          FQDN=$(az containerapp show \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "${{ matrix.app }}" \
+            --query properties.configuration.ingress.fqdn --output tsv)
+          # The app scales to zero and its database auto-pauses, so the first
+          # answer after a deploy can take a couple of minutes.
+          for attempt in $(seq 1 40); do
+            BODY=$(curl -fsS --max-time 20 "https://${FQDN}/health" || true)
+            echo "attempt ${attempt}: ${BODY:-no answer yet}"
+            if echo "$BODY" | grep -q "\"version\":\"${TAG}\""; then
+              echo "deployed ${TAG} to https://${FQDN}"
+              echo "https://${FQDN}" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "the new revision of ${{ matrix.app }} never became healthy" >&2
+          exit 1
+
+  deploy-ui:
+    name: deploy UI
+    needs: deploy-services
+    if: ${{ !cancelled() && !failure() && vars.AZURE_RESOURCE_GROUP != '' }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Point the UI at the deployed services
+        run: |
+          url() {
+            az containerapp show --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" --name "$1" \
+              --query properties.configuration.ingress.fqdn --output tsv
+          }
+          cat > ui/config.js <<CONFIG
+          // Written by the deploy pipeline. Local values are in the repository.
+          window.THRIFT_CONFIG = {
+            listingsUrl: "https://$(url "${{ vars.LISTINGS_APP }}")",
+            swapsUrl: "https://$(url "${{ vars.SWAPS_APP }}")",
+            timeoutMs: 8000,
+            retryMs: 10000,
+          };
+          CONFIG
+          cat ui/config.js
+      - uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: upload
+          app_location: ui
+          skip_app_build: true
+          skip_api_build: true

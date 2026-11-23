@@ -1,12 +1,11 @@
 name: CI
 
-# Runs on every pull request and on pushes to main: lint, format check, tests
-# against a real SQL Server with a coverage gate, image build, and a smoke test
-# of the compose stack. CI never touches Azure.
+# Runs on every pull request: lint, format check, tests against a real SQL
+# Server with a coverage gate, image build, and end-to-end checks on the compose
+# stack. CI never touches Azure. On main, cd.yml calls this workflow first and
+# deploys only if it passes.
 on:
   pull_request:
-  push:
-    branches: [main]
   workflow_call:
 
 permissions:
@@ -88,8 +87,8 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
-  smoke:
-    name: compose stack answers /health
+  e2e:
+    name: end-to-end on the compose stack
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -101,16 +100,27 @@ jobs:
             echo "$name=$value" >> .env
           done
       - run: docker compose up -d --build
-      - name: Both services return 200 on /health
+      - name: Both services and the UI answer
         run: |
-          for port in 8001 8002; do
+          for url in http://localhost:8001/health http://localhost:8002/health http://localhost:8080/; do
             for attempt in $(seq 1 60); do
-              if curl -fsS "http://localhost:${port}/health"; then echo; continue 2; fi
+              if curl -fsS -o /dev/null "$url"; then echo "up: $url"; continue 2; fi
               sleep 2
             done
-            echo "service on port ${port} did not become healthy" >&2
+            echo "$url did not answer" >&2
             exit 1
           done
+      - name: Post two listings, propose a swap, accept it
+        run: python3 tests/e2e/flow.py flow
+      - name: Listings keeps working when Swaps is down
+        run: |
+          docker compose stop swaps
+          python3 tests/e2e/flow.py swaps-down
+          docker compose start swaps
+      - name: Swaps keeps working when Listings is down
+        run: |
+          docker compose stop listings
+          python3 tests/e2e/flow.py listings-down
       - name: Service logs
         if: always()
-        run: docker compose logs
+        run: docker compose logs listings swaps db-init
