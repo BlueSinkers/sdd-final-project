@@ -35,12 +35,13 @@ cp .env.example .env                # local passwords, git-ignored
 docker compose up --build
 curl http://localhost:8001/health   # listings
 curl http://localhost:8002/health   # swaps
+open http://localhost:8080          # the board
 ```
 
 Each returns `{"status":"ok",...}`. Each request logs one line (service, method, path, status,
 duration). The first start takes about a minute: SQL Server has to be healthy before the
-services start. If a port is already in use on your machine, set `LISTINGS_PORT`, `SWAPS_PORT`
-or `SQL_PORT` in `.env`.
+services start. If a port is already in use on your machine, set `LISTINGS_PORT`, `SWAPS_PORT`,
+`SQL_PORT` or `UI_PORT` in `.env`.
 
 Each service applies its own versioned migrations (`<service>/migrations/NNN_name.sql`) on
 startup. Applied files are never edited; a schema change is a new file.
