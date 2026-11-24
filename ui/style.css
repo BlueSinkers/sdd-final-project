@@ -70,9 +70,6 @@ h3 {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  list-style: none;
-  margin: 0;
-  padding: 0;
 }
 
 .pill {
@@ -430,6 +427,16 @@ textarea {
 .swap-actions {
   display: flex;
   gap: 8px;
+}
+
+.swap-actions {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.swap-blocked {
+  color: var(--muted);
+  font-size: 0.9rem;
 }
 
 .swap-actions:empty {
