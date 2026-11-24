@@ -10,4 +10,6 @@ window.THRIFT_CONFIG = {
   timeoutMs: 8000,
   // While a service is unreachable the page tries again this often.
   retryMs: 10000,
+  // While the page is open and visible it re-reads both services this often.
+  refreshMs: 30000,
 };
