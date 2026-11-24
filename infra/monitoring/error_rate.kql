@@ -1,0 +1,10 @@
+// Share of requests that failed on our side (5xx), per service, in 5-minute buckets.
+// 4xx are the caller's mistakes (validation, unknown id) and do not count as errors.
+ContainerAppConsoleLogs_CL
+| where Log_s startswith "service="
+| parse Log_s with "service=" service " method=" method " path=" path " status=" status:int " duration_ms=" duration_ms:real
+| where isnotnull(status) and path != "/health"
+| summarize requests = count(), errors = countif(status >= 500) by service, bin(TimeGenerated, 5m)
+| extend error_rate_percent = round(100.0 * errors / requests, 2)
+| project TimeGenerated, service, error_rate_percent
+| render timechart
