@@ -6,6 +6,8 @@ When someone proposes a swap, the app tells them how fair the trade is:
 
 **Live URL:** https://kind-forest-0330c0b03.8.azurestaticapps.net
 
+**Sprint Review presentation:** https://canva.link/x5zzke3budm6904
+
 ### Production endpoints
 
 | Piece | URL |

@@ -49,7 +49,13 @@ By our Definition of Done an item is Done only when it is merged to `main` and d
 
 ## Review (25-26 Nov)
 
-_Filled in after the Sprint Review: what was demonstrated and the feedback received._
+**Presentation (Canva):** https://canva.link/x5zzke3budm6904
+
+**Live demo:** https://kind-forest-0330c0b03.8.azurestaticapps.net
+
+**Monitoring workbook:** Azure portal → `rg-sdd-3b-g1` → workbook **Thrift-Swap Board**
+
+_Filled in after the Sprint Review: feedback received from the class._
 
 ## Retrospective agreements
 
