@@ -1,91 +1,130 @@
 # Architecture Decision Records
 
-## ADR-1: Two services with separate databases
-- **Status:** Accepted
-- **Context:** Listings are catalog data that changes occasionally. Swaps are a log of
-  proposals with their own lifecycle.
-- **Decision:** Separate Listings and Swaps services, each with its own database. They
-  never call each other; the UI sends listing snapshots to Swaps.
-- **Consequences:** If Swaps is down, browsing and posting still work. The client is
-  trusted to send honest snapshots, which is acceptable at this scope.
+Six records: architecture, stack and storage, the feature beyond CRUD, the frontend,
+deployment and pipeline, monitoring. Each lists the alternatives we considered and what the
+choice costs us.
 
-## ADR-2: Python, FastAPI and plain SQL
+## ADR-1: Architecture: two services split by what the data is, layered inside
 - **Status:** Accepted
-- **Context:** Each of us already built FastAPI services on Azure SQL in Assignment 2. We
-  have five days.
-- **Decision:** Both services use FastAPI with pydantic models for validation and `pymssql`
-  with hand-written, parameterised SQL in one `repository.py` per service. No ORM.
-- **Consequences:** Two small tables do not need an ORM, and the SQL that runs is the SQL we
-  wrote and can read. Validation errors come back as 422 with a field-level message for
-  free. The cost is that we are tied to SQL Server: tests need a real SQL Server (a
-  container locally and in CI) instead of an in-memory database. We accept that because it
-  means the tests run against the same engine as production.
+- **Context:** The brief asks for exactly two services, each in its own container with its
+  own database. Listings are catalog data that changes occasionally. Swaps are a log of
+  proposals with their own lifecycle (proposed, accepted, declined) and hold our feature
+  beyond CRUD.
+- **Decision:** A Listings service and a Swaps service, each with its own database and its
+  own database user. They never call each other: the browser calls both over HTTP and
+  carries a snapshot of the listings to Swaps (ADR-3). Inside each service the code is
+  layered: `routes.py` (HTTP only), `models.py` (shapes and validation), `repository.py`
+  (all SQL), and in Swaps a pure `fairness.py` with no database or HTTP in it.
+- **Alternatives:** (a) Swaps fetches the listings from Listings over HTTP: the score would
+  use authoritative values, but Swaps would stop working whenever Listings is down or cold.
+  (b) Split by technical role (an API service and a scoring service): the scoring service
+  would have no data of its own. (c) Hexagonal structure inside each service: more
+  indirection than two small tables justify.
+- **Consequences:** Either service keeps working when the other is down, which CI proves on
+  every pull request. The costs: the client is trusted to send honest snapshots (ADR-3),
+  and anything that involves both services (accepting a swap marks two listings as swapped)
+  is coordinated by the browser, so it can be left half done if the tab closes in between.
 
-## ADR-3: The browser calls both services directly
+## ADR-2: Stack and storage: FastAPI, Azure SQL serverless, plain SQL, migrations on startup
 - **Status:** Accepted
-- **Context:** The UI needs data from both services. The alternatives were a gateway or
-  backend-for-frontend in front of them, or one service proxying the other.
-- **Decision:** The static UI calls each service directly. Each service has a CORS
-  allow-list (`CORS_ORIGINS`) with exactly one entry: the UI's origin.
-- **Consequences:** No third component to build, deploy and keep alive, and no hidden
-  coupling: each part of the page depends on exactly one service, which is what makes the
-  partial-failure behaviour simple. The cost is that the service URLs are public and CORS is
-  not access control (any script outside a browser can call the API). With no accounts and
-  no private data (ADR-7) that is acceptable here; with accounts we would add a gateway.
+- **Context:** The stack is fixed to the one from Assignment 2 and the sprint is short.
+  Each service needs its own Azure SQL serverless database, and the schema must come from
+  versioned migration files applied on startup.
+- **Decision:** Python and FastAPI, with pydantic models for validation. `pymssql` with
+  hand-written, parameterised SQL in one `repository.py` per service, no ORM. Each service
+  has `migrations/NNN_name.sql`; on startup it applies, in order, every file not yet
+  recorded in its `schema_migrations` table, each in one transaction with the row that
+  records it. Applied files are never edited. Money is `DECIMAL(10,2)`; check constraints
+  repeat the API's rules.
+- **Alternatives:** (a) Node and Express: our Assignment 2 experience is all in Python. (b) SQLAlchemy
+  and Alembic: a real benefit with many tables, but for one table per service it hides the
+  SQL we want to be able to read and explain. (c) SQLite for tests: faster, but then the
+  tests would not run on the engine we deploy to.
+- **Consequences:** The SQL that runs is the SQL we wrote. Tests run against a real SQL
+  Server (a container locally and in CI, never the Azure database). A failing migration
+  rolls back and stops the service from starting, so the deploy's health check fails and
+  the previous revision keeps serving. Migrations on startup are safe only because each
+  service runs at most one replica. We are tied to SQL Server.
 
-## ADR-4: The fairness score is computed in the Swaps service, from snapshots
+## ADR-3: The feature beyond CRUD: a fairness score computed by Swaps from snapshots
 - **Status:** Accepted
-- **Context:** The score needs both listings' value and condition, which live in the
-  Listings database. Swaps could fetch them from Listings, or the caller could send them.
-- **Decision:** The caller sends a snapshot of both listings. The Swaps service validates the
-  snapshot, computes the score and verdict itself (`fairness.py`, a pure module that works in
-  whole cents and cuts the score to four decimals instead of rounding it up), and stores
-  the snapshot, both adjusted values, the score and the verdict with the proposal. A caller
-  can never send its own score.
-- **Consequences:** Swaps works when Listings is down, and a proposal keeps showing what was
-  actually compared even if the listing is edited or deleted later. The cost: a dishonest
-  client can send a false value or condition, so the verdict is advice to the two students,
-  not something to enforce. Accepting a swap does not require a fair verdict.
+- **Context:** When a swap is proposed the app says how fair it is. The score needs both
+  listings' value and condition, which live in the Listings database.
+- **Decision:** `adjusted = value x (0.5 + condition / 10)`, `fairness = smaller / larger`;
+  Fair trade at 0.8 or above, Lopsided from 0.5, Very uneven below. The caller sends a
+  snapshot of both listings. Swaps validates it, computes the score and verdict itself in
+  whole cents (cut to four decimals, never rounded up across a boundary) and stores the
+  snapshot, both adjusted values, the score and the verdict. A caller cannot send a score.
+- **Alternatives:** (a) Compute the score in the browser: no server-side rule to test, and
+  nothing stored. (b) Swaps looks the listings up in Listings: see ADR-1. (c) Ask an LLM to
+  judge the trade: a paid dependency and an answer we could not unit test.
+- **Consequences:** The rule is one small module with 100% test coverage, including both
+  boundaries. A proposal keeps showing what was actually compared even if a listing is
+  edited or deleted later. A dishonest client can send a false value, so the verdict is
+  advice to the two students, not something we enforce: accepting does not require a fair
+  verdict.
 
-## ADR-5: Versioned SQL migrations, applied by the service on startup
+## ADR-4: Frontend: plain static files that call both services, CORS limited to the UI
 - **Status:** Accepted
-- **Context:** Schema changes must be repeatable from a clean clone and on Azure, without
-  anyone running SQL by hand.
-- **Decision:** Each service has `migrations/NNN_name.sql`. On startup it applies, in order,
-  every file not yet recorded in its `schema_migrations` table, each in one transaction
-  together with the row that records it. Applied files are never edited.
-- **Consequences:** `docker compose up` on a clean clone and a deploy to Azure both end with
-  the right schema. A failing migration rolls back and stops the service from starting, so
-  the deploy's `/health` check fails and the old revision keeps serving. It is safe only
-  because each service runs at most one replica (two replicas starting at once could race);
-  if we scaled out we would move migrations to a separate deploy step. Migrations must stay
-  compatible with the previous image so that a rollback works (see `deploy.md`).
+- **Context:** The UI must be a static site on Azure Static Web Apps that calls the services
+  from the browser, with CORS restricted to its origin. User accounts are out of scope.
+- **Decision:** Plain HTML, CSS and JavaScript modules with no build step. Each service
+  allows exactly one origin (`CORS_ORIGINS`). Every request has an 8 second timeout; when a
+  service does not answer the page says so in plain words, keeps the other half working,
+  retries every 10 seconds and recovers on its own. Text from the API is only ever inserted
+  as text. There is no sign-in: a listing carries the name its owner typed.
+- **Alternatives:** (a) React or Vue built to static files: a build step and a dependency
+  tree for a page with two lists and two forms. (b) A gateway in front of both services: it
+  would be a third container, which is out of scope. (c) A hard-coded demo user or API key:
+  allowed by the brief, but it would add nothing a reviewer could see.
+- **Consequences:** Nothing to build or bundle: the pipeline uploads the folder. The page
+  handles a scaled-to-zero service waking up. The costs: no component framework if the UI
+  grows, CORS is not access control, and without accounts anyone with the URL can edit or
+  delete anything. That is acceptable for a class demo and the first thing to change after.
 
-## ADR-6: Scale to zero, and an SLO measured at the service
+## ADR-5: Deployment and pipeline: GitHub Actions, GHCR, Container Apps, scripted setup
 - **Status:** Accepted
-- **Context:** The budget is small. Container Apps can scale to zero and Azure SQL serverless
-  can pause, but then the first request after an idle period is slow: a few seconds for the
-  container, up to about a minute for the database.
-- **Decision:** Both services scale between 0 and 1 replica and both databases pause after
-  60 idle minutes. The SLO is **99% of `POST /swaps` requests complete in under 500 ms over
-  7 days**, measured from the service's own request log line, so the wait before a request
-  reaches a starting container is not counted. The UI is built for the cold start: 8 second
-  timeout, a clear "unavailable" state, automatic retry every 10 seconds.
-- **Consequences:** Idle cost is close to zero and steady-state latency (tens of
-  milliseconds locally) has a lot of room under 500 ms. The cost is honesty about what the
-  number means: the first user after a quiet period waits longer than the SLO suggests. A
-  request that arrives while the database is still resuming can take longer than 500 ms
-  inside the service, and those do count against the SLO. If cold starts mattered to users
-  we would set the minimum replicas to 1 and measure at the ingress instead.
+- **Context:** Every change must reach production through a reviewed pull request and an
+  automated pipeline, with nothing changed by hand after the initial setup.
+- **Decision:** CI on every push and pull request: lint, format check, dependency audit and
+  static security scan, tests on a real SQL Server with a 70% coverage gate, image build,
+  and end-to-end checks on the compose stack including both partial-failure cases. CD on
+  merge to `main`, only if CI passed: push both images to GHCR tagged with the commit SHA,
+  roll each Container App to that image, wait until `/health` returns 200 and reports that
+  SHA, publish the UI with the service URLs written into `config.js`, then run a read-only
+  smoke test against the public URLs. Rollback is the same workflow run by hand with an
+  older SHA. The Azure resources are created once by `infra/setup.sh` (Azure CLI), named
+  with the group prefix, with database URLs stored as Container App secrets.
+- **Alternatives:** (a) Bicep or Terraform for the setup: declarative and credited, but we
+  could not test a template against Azure in the time we had; a re-runnable CLI script was
+  the smaller risk. (b) The `latest` tag only: no way to say what is deployed or to roll
+  back. (c) Blue-green or canary with traffic splitting between revisions: with at most one
+  replica and no real traffic there is little to observe.
+- **Consequences:** What is deployed is always a known commit, visible in `/health`.
+  Container Apps starts the new revision next to the old one and moves traffic only when it
+  is ready, so a deploy that fails to start does not take the product down. The costs: the
+  setup script must be kept in step with the resources by hand, and a migration must stay
+  compatible with the previous image for a rollback to work.
 
-## ADR-7: No user accounts
+## ADR-6: Monitoring: one log line per request, an SLO measured at the service, scale to zero
 - **Status:** Accepted
-- **Context:** The product is a small board for one class. Authentication would take a large
-  share of five days and is not what the project is assessed on.
-- **Decision:** No sign-in. A listing carries the name its owner typed. Anyone can edit,
-  delete or accept.
-- **Consequences:** The whole flow can be shown in one browser without setting up users. It
-  is not safe for real use: anyone with the URL can change anything. Input is still
-  validated on the server, the database enforces the same rules with check constraints, and
-  the UI never inserts API text as HTML. Accounts and per-owner permissions are the first
-  thing to add after the course.
+- **Context:** We must see request count, error rate and response time in Azure and state
+  one SLO with the query that measures it. Both Container Apps scale to zero and both
+  databases auto-pause, so the first request after an idle period is slow: a few seconds
+  for the container, up to about a minute for the database.
+- **Decision:** Each service writes one line per request to standard output
+  (`service method path status duration_ms`) at INFO level, with no request bodies. The
+  Container Apps environment sends it to its Log Analytics workspace. Saved KQL queries and
+  an Azure Workbook built on them give request count, error rate (5xx only) and response
+  time. The SLO is **99% of `POST /swaps` requests complete in under 500 ms over 7 days**,
+  measured from those log lines.
+- **Alternatives:** (a) Application Insights: richer, but another Azure service, which the
+  brief does not allow. (b) Measure the SLO at the ingress, including cold starts: more
+  honest about what a user feels, but with scale-to-zero required the number would mostly
+  measure idle time, not our code. (c) An SLO on `GET /listings`: the more frequent request,
+  but proposing a swap is the one a user waits on to learn something.
+- **Consequences:** Log volume is one short line per request. The SLO says how fast the
+  service is once a request reaches it; the wait for a container to start is not in it, and
+  we say so wherever we show the number. A request that arrives while the database is still
+  resuming can exceed 500 ms inside the service, and that does count. The UI is built for
+  the cold start instead (ADR-4).
