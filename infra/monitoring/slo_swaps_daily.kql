@@ -1,0 +1,10 @@
+// The same SLO per day, to see when it was missed.
+let threshold_ms = 500;
+ContainerAppConsoleLogs_CL
+| where TimeGenerated > ago(7d)
+| where Log_s startswith "service=swaps "
+| parse Log_s with "service=" service " method=" method " path=" path " status=" status:int " duration_ms=" duration_ms:real
+| where method == "POST" and path == "/swaps"
+| summarize total = count(), good = countif(duration_ms < threshold_ms and status < 500) by day = bin(TimeGenerated, 1d)
+| extend achieved_percent = round(100.0 * good / total, 3)
+| order by day asc

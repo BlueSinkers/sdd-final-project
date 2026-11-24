@@ -1,0 +1,8 @@
+// Response time per service: median, 95th and 99th percentile, in 5-minute buckets.
+ContainerAppConsoleLogs_CL
+| where Log_s startswith "service="
+| parse Log_s with "service=" service " method=" method " path=" path " status=" status:int " duration_ms=" duration_ms:real
+| where isnotnull(status) and path != "/health"
+| summarize p50_ms = percentile(duration_ms, 50), p95_ms = percentile(duration_ms, 95), p99_ms = percentile(duration_ms, 99)
+    by service, bin(TimeGenerated, 5m)
+| render timechart
