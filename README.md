@@ -103,6 +103,17 @@ Every request from the UI times out after 8 seconds. The page retries every 10 s
 recovers on its own. No stack trace or status code is ever shown to a user. CI proves both
 cases on every pull request (`tests/e2e/flow.py`).
 
+## Accounts
+
+Reading the board needs no account. Posting, proposing and answering do: sign up or log in
+with the button in the header. The Listings service stores accounts (passwords only as
+salted scrypt hashes) and issues a signed token that lasts 7 days. Both services check the
+token themselves with the shared `AUTH_SECRET`, so they still never call each other.
+
+For a demo, `DEMO_LOGIN=true` (the default in `docker compose`) adds one-click accounts for
+the owners of the seeded listings (Lucia, Omar, Chen, Marta, Jonas, Aisha) with no password,
+so one person can play both sides of a swap. Set `DEMO_LOGIN=false` to turn that off.
+
 ## API
 
 Listings (`http://localhost:8001`, interactive docs at `/docs`):
@@ -111,21 +122,24 @@ Listings (`http://localhost:8001`, interactive docs at `/docs`):
 |---|---|---|
 | GET | `/health` | 200 when the service and its database answer, 503 otherwise |
 | GET | `/listings` | listings, newest first; `?status=open`, `?category=books`; `?limit=` (1-500, default 200) and `?offset=` |
-| POST | `/listings` | 201 with the created listing; 422 if invalid |
+| POST | `/auth/signup` | 201 with `{username, token}`; 409 if the username is taken |
+| POST | `/auth/login` | `{username, token}`; 401 for a wrong username or password |
+| GET | `/auth/demo`, POST `/auth/demo` | one-click demo accounts, only when `DEMO_LOGIN=true` |
+| POST | `/listings` | **login needed.** 201 with the created listing, owned by the caller; 422 if invalid |
 | GET | `/listings/{id}` | one listing or 404 |
-| PUT | `/listings/{id}` | replaces the listing, keeps its status |
-| PATCH | `/listings/{id}/status` | `{"status": "swapped"}` or `"open"` |
-| DELETE | `/listings/{id}` | 204, or 404 for an unknown id |
+| PUT | `/listings/{id}` | **owner only** (403 otherwise). Replaces the listing, keeps its status |
+| PATCH | `/listings/{id}/status` | **login needed.** `{"status": "swapped"}` or `"open"` |
+| DELETE | `/listings/{id}` | **owner only.** 204, or 404 for an unknown id |
 
 Swaps (`http://localhost:8002`, interactive docs at `/docs`):
 
 | Method | Path | Result |
 |---|---|---|
 | GET | `/health` | 200 when the service and its database answer, 503 otherwise |
-| POST | `/swaps` | 201 with the stored proposal, its fairness score and verdict |
+| POST | `/swaps` | **login needed.** You offer one of your own listings (403 otherwise). 201 with the stored proposal, its fairness score and verdict |
 | GET | `/swaps` | recent proposals, newest first; `?limit=`, `?listing_id=` |
 | GET | `/swaps/{id}` | one proposal or 404 |
-| PATCH | `/swaps/{id}/status` | `accepted` or `declined`; 409 if already decided, or if accepting would put an item in two accepted swaps |
+| PATCH | `/swaps/{id}/status` | **Owner of the requested item** accepts or declines; the proposer may decline to withdraw; 403 for anyone else. `accepted` or `declined`; 409 if already decided, or if accepting would put an item in two accepted swaps |
 
 ## Run locally
 

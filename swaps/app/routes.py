@@ -8,6 +8,7 @@ from app import repository
 from app.db import Connection, get_conn
 from app.fairness import adjusted_value, fairness_score, verdict_for
 from app.models import MAX_ID, DecisionIn, Status, Swap, SwapIn
+from app.tokens import current_user, same_person
 
 router = APIRouter(prefix="/swaps", tags=["swaps"])
 
@@ -16,8 +17,15 @@ SwapId = Annotated[int, Path(ge=1, le=MAX_ID)]
 
 
 @router.post("", response_model=Swap, status_code=201)
-def propose_swap(data: SwapIn, conn: Connection = Depends(get_conn)):
-    """Score a proposed swap from the two listing snapshots, store it and return the verdict."""
+def propose_swap(data: SwapIn, conn: Connection = Depends(get_conn), username: str = Depends(current_user)):
+    """Score a proposed swap from the two listing snapshots, store it and return the verdict.
+
+    You offer one of your own items for someone else's."""
+    if not same_person(data.offered.owner_name, username):
+        raise HTTPException(status_code=403, detail="You can only offer one of your own listings.")
+    if same_person(data.requested.owner_name, username):
+        raise HTTPException(status_code=403, detail="You cannot propose a swap for your own listing.")
+    data = data.model_copy(update={"proposer_name": username})
     offered = adjusted_value(data.offered.estimated_value, data.offered.condition)
     requested = adjusted_value(data.requested.estimated_value, data.requested.condition)
     score = fairness_score(offered, requested)
@@ -43,8 +51,23 @@ def get_swap(swap_id: SwapId, conn: Connection = Depends(get_conn)):
 
 
 @router.patch("/{swap_id}/status", response_model=Swap)
-def decide_swap(swap_id: SwapId, data: DecisionIn, conn: Connection = Depends(get_conn)):
-    """Accept or decline a proposed swap. A swap can be decided only once."""
+def decide_swap(
+    swap_id: SwapId,
+    data: DecisionIn,
+    conn: Connection = Depends(get_conn),
+    username: str = Depends(current_user),
+):
+    """Accept or decline a proposed swap. A swap can be decided only once.
+
+    The owner of the requested item decides. The proposer may also decline, which
+    withdraws the proposal."""
+    existing = repository.get_swap(conn, swap_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Swap not found.")
+    is_owner = same_person(existing.requested.owner_name, username)
+    is_withdrawal = data.status is Status.declined and same_person(existing.proposer_name, username)
+    if not (is_owner or is_withdrawal):
+        raise HTTPException(status_code=403, detail="Only the owner of the requested item can answer this swap.")
     decided = repository.decide_swap(conn, swap_id, data.status)
     if decided is not None:
         return decided

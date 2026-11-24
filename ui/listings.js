@@ -2,6 +2,7 @@
 
 import { ApiError, RETRY_MS, listingsApi } from "./api.js";
 import { CONDITION_LABELS, clear, el, formatEuros, setPill, toast } from "./dom.js";
+import { currentUser, isMe, openSignIn } from "./session.js";
 
 const CATEGORY_LABELS = {
   clothing: "Clothing",
@@ -76,30 +77,33 @@ function card(listing) {
     const button = build(listing);
     if (button) actions.append(button);
   }
-  actions.append(
-    // aria-label names the listing, so a screen reader does not hear six identical "Edit" buttons.
-    el("button", {
-      class: "btn btn-quiet",
-      type: "button",
-      text: "Edit",
-      "aria-label": `Edit ${listing.title}`,
-      onclick: () => openDialog(listing),
-    }),
-    el("button", {
-      class: "btn btn-quiet",
-      type: "button",
-      text: swapped ? "Reopen" : "Mark swapped",
-      "aria-label": `${swapped ? "Reopen" : "Mark as swapped"}: ${listing.title}`,
-      onclick: () => changeStatus(listing, swapped ? "open" : "swapped"),
-    }),
-    el("button", {
-      class: "btn btn-quiet btn-danger",
-      type: "button",
-      text: "Delete",
-      "aria-label": `Delete ${listing.title}`,
-      onclick: () => remove(listing),
-    }),
-  );
+  // Only the person who posted a listing can change it.
+  if (isMe(listing.owner_name)) {
+    actions.append(
+      // aria-label names the listing, so a screen reader does not hear six identical "Edit" buttons.
+      el("button", {
+        class: "btn btn-quiet",
+        type: "button",
+        text: "Edit",
+        "aria-label": `Edit ${listing.title}`,
+        onclick: () => openDialog(listing),
+      }),
+      el("button", {
+        class: "btn btn-quiet",
+        type: "button",
+        text: swapped ? "Reopen" : "Mark swapped",
+        "aria-label": `${swapped ? "Reopen" : "Mark as swapped"}: ${listing.title}`,
+        onclick: () => changeStatus(listing, swapped ? "open" : "swapped"),
+      }),
+      el("button", {
+        class: "btn btn-quiet btn-danger",
+        type: "button",
+        text: "Delete",
+        "aria-label": `Delete ${listing.title}`,
+        onclick: () => remove(listing),
+      }),
+    );
+  }
   return el(
     "li",
     { class: swapped ? "card card-swapped" : "card" },
@@ -113,7 +117,7 @@ function card(listing) {
     el("h3", { text: listing.title }),
     listing.description ? el("p", { class: "description", text: listing.description }) : null,
     conditionDots(listing.condition),
-    el("p", { class: "owner", text: `Posted by ${listing.owner_name}` }),
+    el("p", { class: "owner", text: isMe(listing.owner_name) ? "Posted by you" : `Posted by ${listing.owner_name}` }),
     actions,
   );
 }
@@ -188,6 +192,11 @@ async function remove(listing) {
 }
 
 function openDialog(listing = null) {
+  // Posting needs an account; come back here once signed in.
+  if (!currentUser()) {
+    openSignIn(() => openDialog(listing));
+    return;
+  }
   form.reset();
   formError.textContent = "";
   form.dataset.id = listing ? String(listing.id) : "";
@@ -195,7 +204,7 @@ function openDialog(listing = null) {
   document.getElementById("listing-submit").textContent = listing ? "Save changes" : "Post listing";
   form.elements.condition.value = "3";
   if (listing) {
-    for (const name of ["title", "description", "category", "condition", "estimated_value", "owner_name"]) {
+    for (const name of ["title", "description", "category", "condition", "estimated_value"]) {
       form.elements[name].value = listing[name];
     }
   }
@@ -211,7 +220,6 @@ async function submit(event) {
     category: fields.category.value,
     condition: Number(fields.condition.value),
     estimated_value: Number(fields.estimated_value.value),
-    owner_name: fields.owner_name.value,
   };
   const id = form.dataset.id;
   const button = document.getElementById("listing-submit");

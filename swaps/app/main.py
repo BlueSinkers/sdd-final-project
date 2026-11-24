@@ -78,7 +78,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         CORSMiddleware,
         allow_origins=list(settings.cors_origins),
         allow_methods=["GET", "POST", "PATCH"],
-        allow_headers=["Content-Type"],
+        allow_headers=["Content-Type", "Authorization"],
     )
 
     @app.get("/health")

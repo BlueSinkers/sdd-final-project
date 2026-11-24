@@ -5,7 +5,8 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, test } from "node:test";
 
 globalThis.window = { THRIFT_CONFIG: { listingsUrl: "http://l.test/", swapsUrl: "http://s.test", timeoutMs: 50, retryMs: 1234 } };
-const { ApiError, LISTINGS_URL, RETRY_MS, SWAPS_URL, listingsApi, swapsApi } = await import("../api.js");
+const { ApiError, LISTINGS_URL, RETRY_MS, SWAPS_URL, authApi, listingsApi, setAuthToken, setUnauthorizedHandler, swapsApi } =
+  await import("../api.js");
 
 const realFetch = globalThis.fetch;
 let calls;
@@ -135,5 +136,48 @@ describe("failures", () => {
     const error = await failure(() => swapsApi.list());
     assert.equal(error.kind, "timeout");
     assert.equal(error.serviceDown, true);
+  });
+});
+
+describe("signing in", () => {
+  afterEach(() => {
+    setAuthToken(null);
+    setUnauthorizedHandler(() => {});
+  });
+
+  test("the token is sent to both services once set, and not before", async () => {
+    answer(200, []);
+    await listingsApi.list();
+    assert.equal(calls[0].options.headers, undefined);
+    setAuthToken("abc.def");
+    await listingsApi.list();
+    await swapsApi.propose({ message: "" });
+    assert.equal(calls[1].options.headers.Authorization, "Bearer abc.def");
+    assert.equal(calls[2].options.headers.Authorization, "Bearer abc.def");
+    assert.equal(calls[2].options.headers["Content-Type"], "application/json");
+  });
+
+  test("401 on a normal request reports the session as ended", async () => {
+    let ended = 0;
+    setUnauthorizedHandler(() => {
+      ended += 1;
+    });
+    setAuthToken("old.token");
+    answer(401, { detail: "Please log in first." });
+    await assert.rejects(listingsApi.create({}), (error) => error instanceof ApiError && error.kind === "signin");
+    assert.equal(ended, 1);
+  });
+
+  test("a wrong password is shown as it is and signs nobody out", async () => {
+    let ended = 0;
+    setUnauthorizedHandler(() => {
+      ended += 1;
+    });
+    setAuthToken("still.valid");
+    answer(401, { detail: "Wrong username or password." });
+    await assert.rejects(authApi.logIn({ username: "a", password: "b" }), { message: "Wrong username or password." });
+    assert.equal(ended, 0);
+    answer(403, { detail: "You can only offer one of your own listings." });
+    await assert.rejects(swapsApi.propose({}), (error) => error.kind === "forbidden" && error.message.startsWith("You can only"));
   });
 });

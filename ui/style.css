@@ -621,3 +621,42 @@ dialog label textarea {
     transition: none;
   }
 }
+
+/* Account */
+.account {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.account .btn-small {
+  margin-left: 0;
+}
+
+.account-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.auth-demo {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.auth-demo[hidden] {
+  display: none;
+}
+
+.auth-demo .hint {
+  margin: 0 0 8px;
+}
+
+.demo-accounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.demo-accounts .btn-small {
+  margin-left: 0;
+}

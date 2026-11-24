@@ -44,13 +44,26 @@ def test_settings_come_from_the_environment(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "mssql://u:p@host:1433/listings")
     monkeypatch.setenv("CORS_ORIGINS", "http://localhost:8080, https://example.org/ ,")
     monkeypatch.setenv("GIT_SHA", "abc1234")
+    monkeypatch.setenv("AUTH_SECRET", "s" * 32)
     settings = load_settings()
     assert settings.database_url == "mssql://u:p@host:1433/listings"
     assert settings.cors_origins == ("http://localhost:8080", "https://example.org")
     assert settings.version == "abc1234"
+    assert settings.auth_secret == "s" * 32
 
 
 def test_missing_database_url_is_a_clear_error(monkeypatch):
     monkeypatch.delenv("DATABASE_URL", raising=False)
     with pytest.raises(RuntimeError, match="DATABASE_URL is not set"):
+        load_settings()
+
+
+@pytest.mark.parametrize("secret", [None, "", "too-short"])
+def test_missing_or_short_auth_secret_is_a_clear_error(monkeypatch, secret):
+    monkeypatch.setenv("DATABASE_URL", "mssql://u:p@host:1433/db")
+    if secret is None:
+        monkeypatch.delenv("AUTH_SECRET", raising=False)
+    else:
+        monkeypatch.setenv("AUTH_SECRET", secret)
+    with pytest.raises(RuntimeError, match="AUTH_SECRET"):
         load_settings()

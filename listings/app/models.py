@@ -55,7 +55,8 @@ class ListingIn(BaseModel):
     condition: int = Field(ge=1, le=5)
     # The owner's own estimate, in euros.
     estimated_value: float = Field(gt=0, le=MAX_VALUE_EUR)
-    owner_name: OwnerName
+    # Set by the service from the signed-in account; anything sent here is replaced.
+    owner_name: OwnerName | None = None
 
     @field_validator("estimated_value")
     @classmethod

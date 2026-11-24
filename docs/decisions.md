@@ -67,20 +67,32 @@ choice costs us.
 ## ADR-4: Frontend: plain static files that call both services, CORS limited to the UI
 - **Status:** Accepted
 - **Context:** The UI must be a static site on Azure Static Web Apps that calls the services
-  from the browser, with CORS restricted to its origin. User accounts are out of scope.
+  from the browser, with CORS restricted to its origin. The first version had no accounts;
+  anyone could edit any listing or offer someone else's item, which made no sense in use.
 - **Decision:** Plain HTML, CSS and JavaScript modules with no build step. Each service
   allows exactly one origin (`CORS_ORIGINS`). Every request has an 8 second timeout; when a
   service does not answer the page says so in plain words, keeps the other half working,
   retries every 10 seconds and recovers on its own. Text from the API is only ever inserted
-  as text. There is no sign-in: a listing carries the name its owner typed.
+  as text. Sign-in: the Listings service keeps accounts (passwords as salted scrypt hashes)
+  and issues a token signed with `AUTH_SECRET`; both services check the signature locally,
+  so Swaps knows who is asking without calling Listings (ADR-1 holds). Only the owner edits
+  or deletes a listing, you can only offer your own item, and only the owner of the
+  requested item accepts. `DEMO_LOGIN=true` adds password-free demo accounts for showing it.
 - **Alternatives:** (a) React or Vue built to static files: a build step and a dependency
   tree for a page with two lists and two forms. (b) A gateway in front of both services: it
   would be a third container, which is out of scope. (c) A hard-coded demo user or API key:
-  allowed by the brief, but it would add nothing a reviewer could see.
+  allowed by the brief, but it cannot tell two people apart. (d) An identity provider
+  (Entra ID, Auth0): the right answer at scale, but an outside dependency and tenant setup
+  we could not get in time. (e) Swaps asking Listings "who is this token?": simpler than a
+  shared secret, but it breaks ADR-1 and Swaps would fail whenever Listings is asleep.
 - **Consequences:** Nothing to build or bundle: the pipeline uploads the folder. The page
   handles a scaled-to-zero service waking up. The costs: no component framework if the UI
-  grows, CORS is not access control, and without accounts anyone with the URL can edit or
-  delete anything. That is acceptable for a class demo and the first thing to change after.
+  grows, and CORS is not access control. Limits of the sign-in: a token cannot be revoked
+  before it expires (7 days), there is no rate limit on login attempts, the token sits in
+  the browser's localStorage, and the two services must share one secret. Swaps still
+  trusts the item snapshot the browser sends, and marking an item swapped is open to any
+  signed-in account because the other person in a swap has to be able to do it. With
+  `DEMO_LOGIN` on, the six demo accounts are open to everyone by design.
 
 ## ADR-5: Deployment and pipeline: GitHub Actions, GHCR, Container Apps, scripted setup
 - **Status:** Accepted

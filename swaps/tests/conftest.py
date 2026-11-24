@@ -15,6 +15,14 @@ from fastapi.testclient import TestClient
 from app import db
 from app.config import Settings
 from app.main import create_app
+from app.tokens import make_token
+
+TEST_SECRET = "test-secret-test-secret-test-secret-0123"
+
+
+def as_user(username: str) -> dict:
+    """Request headers that sign a test request in as this user."""
+    return {"Authorization": f"Bearer {make_token(TEST_SECRET, username)}"}
 
 
 def recreate_database(database_url: str) -> None:
@@ -64,6 +72,8 @@ def conn(database_url):
 
 @pytest.fixture
 def client(database_url, conn):
-    app = create_app(Settings(database_url=database_url, cors_origins=("http://localhost:8080",)))
-    with TestClient(app) as client:
+    settings = Settings(database_url=database_url, cors_origins=("http://localhost:8080",), auth_secret=TEST_SECRET)
+    with TestClient(create_app(settings)) as client:
+        # Signed in as Lucia unless a test says otherwise.
+        client.headers.update(as_user("Lucia"))
         yield client

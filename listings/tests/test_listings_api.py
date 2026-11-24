@@ -35,9 +35,9 @@ def test_post_creates_an_open_listing(client):
 
 
 def test_post_trims_text_and_rounds_to_cents(client):
-    body = post(client, title="  Lamp  ", owner_name=" Chen ", estimated_value=12.349).json()
+    body = post(client, title="  Lamp  ", estimated_value=12.349).json()
     assert body["title"] == "Lamp"
-    assert body["owner_name"] == "Chen"
+    assert body["owner_name"] == "Lucia"
     assert body["estimated_value"] == 12.35
 
 

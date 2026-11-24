@@ -48,6 +48,8 @@ services:
     environment:
       DATABASE_URL: mssql://listings_user:${LISTINGS_DB_PASSWORD}@sqlserver:1433/listings
       CORS_ORIGINS: http://localhost:${UI_PORT:-8080} # the browser origin of the UI below
+      AUTH_SECRET: ${AUTH_SECRET} # signs sign-in tokens; Swaps gets the same value to check them
+      DEMO_LOGIN: ${DEMO_LOGIN:-true} # one-click demo accounts, no password
     ports:
       - "${LISTINGS_PORT:-8001}:8000"
 
@@ -59,6 +61,7 @@ services:
     environment:
       DATABASE_URL: mssql://swaps_user:${SWAPS_DB_PASSWORD}@sqlserver:1433/swaps
       CORS_ORIGINS: http://localhost:${UI_PORT:-8080}
+      AUTH_SECRET: ${AUTH_SECRET}
     ports:
       - "${SWAPS_PORT:-8002}:8000"
 

@@ -1,9 +1,18 @@
 // Entry point. Each part of the page loads on its own, so one service being
 // down never stops the rest of the page from working.
 
-import { REFRESH_MS } from "./api.js";
-import { initListings, loadListings } from "./listings.js";
-import { initSwaps, loadSwaps } from "./swaps.js";
+import { REFRESH_MS, setUnauthorizedHandler } from "./api.js";
+import { initListings, loadListings, renderListings } from "./listings.js";
+import { initSession, onSessionChange, sessionExpired } from "./session.js";
+import { initSwaps, loadSwaps, renderSwaps } from "./swaps.js";
+
+// Signing in or out changes which buttons each card and swap shows.
+initSession();
+setUnauthorizedHandler(sessionExpired);
+onSessionChange(() => {
+  renderListings();
+  renderSwaps();
+});
 
 initSwaps();
 initListings();
