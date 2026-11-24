@@ -17,6 +17,8 @@ const state = {
   loaded: false,
   error: null,
   retryTimer: null,
+  // Counts load attempts, so an older answer never overwrites a newer one.
+  loadNumber: 0,
 };
 
 const board = document.getElementById("listings");
@@ -30,24 +32,35 @@ const formError = document.getElementById("listing-form-error");
 // Other parts of the page (the swap panel) can add a button to each card
 // without this module knowing about them.
 const cardActions = [];
+const changeListeners = [];
 export const addCardAction = (build) => cardActions.push(build);
+// Called after every load attempt, successful or not.
+export const onListingsChange = (listener) => changeListeners.push(listener);
 export const getListings = () => state.listings;
+// False until the first successful load, so callers can tell "not open" from "not known yet".
+export const listingsLoaded = () => state.loaded;
 
 export async function loadListings() {
   clearTimeout(state.retryTimer);
+  state.loadNumber += 1;
+  const thisLoad = state.loadNumber;
   if (!state.loaded) setPill("status-listings", "Listings", "unknown");
   try {
-    state.listings = await listingsApi.list();
+    const listings = await listingsApi.list();
+    if (thisLoad !== state.loadNumber) return; // a newer load is already on its way
+    state.listings = listings;
     state.loaded = true;
     state.error = null;
     setPill("status-listings", "Listings", "up");
   } catch (error) {
+    if (thisLoad !== state.loadNumber) return;
     state.error = error instanceof ApiError ? error : new ApiError("server", "Something went wrong.");
     setPill("status-listings", "Listings", "down");
     // Keep trying quietly: a service that was asleep answers after a few seconds.
     state.retryTimer = setTimeout(loadListings, RETRY_MS);
   }
   renderListings();
+  for (const listener of changeListeners) listener();
 }
 
 function conditionDots(condition) {
@@ -64,14 +77,28 @@ function card(listing) {
     if (button) actions.append(button);
   }
   actions.append(
-    el("button", { class: "btn btn-quiet", type: "button", text: "Edit", onclick: () => openDialog(listing) }),
+    // aria-label names the listing, so a screen reader does not hear six identical "Edit" buttons.
+    el("button", {
+      class: "btn btn-quiet",
+      type: "button",
+      text: "Edit",
+      "aria-label": `Edit ${listing.title}`,
+      onclick: () => openDialog(listing),
+    }),
     el("button", {
       class: "btn btn-quiet",
       type: "button",
       text: swapped ? "Reopen" : "Mark swapped",
+      "aria-label": `${swapped ? "Reopen" : "Mark as swapped"}: ${listing.title}`,
       onclick: () => changeStatus(listing, swapped ? "open" : "swapped"),
     }),
-    el("button", { class: "btn btn-quiet btn-danger", type: "button", text: "Delete", onclick: () => remove(listing) }),
+    el("button", {
+      class: "btn btn-quiet btn-danger",
+      type: "button",
+      text: "Delete",
+      "aria-label": `Delete ${listing.title}`,
+      onclick: () => remove(listing),
+    }),
   );
   return el(
     "li",
