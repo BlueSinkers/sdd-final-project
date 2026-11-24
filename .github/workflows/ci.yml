@@ -110,6 +110,18 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
+  ui:
+    name: test (ui)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      # No dependencies and no browser: the tests stand in for fetch and the DOM.
+      - name: UI unit tests
+        run: node --test "ui/tests/*.test.mjs"
+
   e2e:
     name: end-to-end on the compose stack
     runs-on: ubuntu-latest
