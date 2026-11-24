@@ -5,6 +5,8 @@ const config = window.THRIFT_CONFIG ?? {};
 const TIMEOUT_MS = config.timeoutMs ?? 8000;
 
 export const RETRY_MS = config.retryMs ?? 10000;
+// How often the open page re-reads both services, so it does not go stale.
+export const REFRESH_MS = config.refreshMs ?? 30000;
 export const LISTINGS_URL = (config.listingsUrl ?? "").replace(/\/$/, "");
 export const SWAPS_URL = (config.swapsUrl ?? "").replace(/\/$/, "");
 

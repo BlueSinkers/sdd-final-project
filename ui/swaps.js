@@ -4,6 +4,7 @@
 import { ApiError, RETRY_MS, listingsApi, swapsApi } from "./api.js";
 import { CONDITION_LABELS, clear, el, formatDate, formatEuros, setPill, toast } from "./dom.js";
 import { addCardAction, getListings, listingsLoaded, loadListings, onListingsChange, renderListings } from "./listings.js";
+import { listingsToFinish } from "./swapstate.js";
 
 const VERDICT_CLASS = { "Fair trade": "verdict-fair", Lopsided: "verdict-lopsided", "Very uneven": "verdict-uneven" };
 const VERDICT_EXPLANATION = {
@@ -126,6 +127,23 @@ function row(swap) {
       }),
     );
   }
+  if (swap.status === "accepted" && listingsLoaded()) {
+    const unfinished = listingsToFinish(swap, getListings());
+    if (unfinished.length > 0) {
+      const busy = state.deciding.has(swap.id);
+      actions.append(
+        el("span", { class: "swap-blocked", text: "This swap was accepted, but its listings are still open." }),
+        el("button", {
+          class: "btn btn-small",
+          type: "button",
+          text: "Mark as swapped",
+          "aria-label": `Mark the listings of this swap as swapped: ${swap.offered.title} for ${swap.requested.title}`,
+          disabled: busy,
+          onclick: () => finish(swap, unfinished),
+        }),
+      );
+    }
+  }
   return el(
     "li",
     { class: "swap" },
@@ -189,16 +207,33 @@ async function decide(swap, status) {
   }
   // The two services never call each other, so the page marks both listings
   // as swapped. If Listings is down the swap still counts as accepted.
-  const marked = await Promise.allSettled([
-    listingsApi.setStatus(swap.offered.listing_id, "swapped"),
-    listingsApi.setStatus(swap.requested.listing_id, "swapped"),
-  ]);
-  if (marked.every((outcome) => outcome.status === "fulfilled")) {
+  const allMarked = await markSwapped([swap.offered.listing_id, swap.requested.listing_id]);
+  if (allMarked) {
     toast("Swap accepted. Both listings are marked as swapped.");
   } else {
-    toast("Swap accepted, but a listing could not be marked as swapped. Mark it on the board yourself.", "error");
+    toast("Swap accepted, but a listing could not be marked as swapped. Use “Mark as swapped” on the swap.", "error");
   }
   await Promise.all([loadSwaps(), loadListings()]);
+}
+
+// Marks each listing as swapped; true only if every request worked.
+async function markSwapped(listingIds) {
+  const marked = await Promise.allSettled(listingIds.map((id) => listingsApi.setStatus(id, "swapped")));
+  return marked.every((outcome) => outcome.status === "fulfilled");
+}
+
+// Finishes an accepted swap whose listings were not marked, at the person's request.
+async function finish(swap, listingIds) {
+  if (state.deciding.has(swap.id)) return;
+  state.deciding.add(swap.id);
+  render();
+  const allMarked = await markSwapped(listingIds);
+  state.deciding.delete(swap.id);
+  toast(
+    allMarked ? "Done. The listings are marked as swapped." : "Listings is not answering. Please try again in a moment.",
+    allMarked ? "info" : "error",
+  );
+  await loadListings();
 }
 
 const snapshot = (listing) => ({
