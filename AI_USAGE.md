@@ -26,3 +26,4 @@ you checked or changed yourself.
 | 2026-11-24 | Abhiram Kidambi | Claude Code | Connection pool in both services (#31) | 9 new tests per service, run in CI against SQL Server; latency gain not measured against Azure |
 | 2026-11-24 | Abhiram Kidambi | Claude Code | Migrate CD workflow from service principal to OIDC authentication with managed identity | Workflow syntax checked; OIDC subjects for environment and ref verified against Azure docs; not run against Azure before this PR |
 | 2026-11-24 | Abhiram Kidambi | Claude Code | Fill Scrum sprint roles, retrospectives, Sprint 2 Done checklist, live URL in README (incl. Rodrigo) | Roles proposed from who did what; team to confirm before Review |
+| 2026-11-24 | Abhiram Kidambi | Claude Code | Document live Azure URL and production endpoints in README and deploy.md | URLs checked with curl /health and smoke test earlier the same day |

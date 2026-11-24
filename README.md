@@ -6,6 +6,18 @@ When someone proposes a swap, the app tells them how fair the trade is:
 
 **Live URL:** https://kind-forest-0330c0b03.8.azurestaticapps.net
 
+### Production endpoints
+
+| Piece | URL |
+|---|---|
+| UI (Static Web App) | https://kind-forest-0330c0b03.8.azurestaticapps.net |
+| Listings API | https://sdd-3b-g1-listings.blackmoss-282db355.westeurope.azurecontainerapps.io |
+| Swaps API | https://sdd-3b-g1-swaps.blackmoss-282db355.westeurope.azurecontainerapps.io |
+| Listings `/health` | https://sdd-3b-g1-listings.blackmoss-282db355.westeurope.azurecontainerapps.io/health |
+| Swaps `/health` | https://sdd-3b-g1-swaps.blackmoss-282db355.westeurope.azurecontainerapps.io/health |
+
+Azure resource group: `rg-sdd-3b-g1` (prefix `sdd-3b-g1`, West Europe). First request after idle can take up to about a minute while a serverless database resumes. Setup and pipeline details: [`docs/deploy.md`](docs/deploy.md).
+
 ## Team and roles
 
 | Member | GitHub | Area |
