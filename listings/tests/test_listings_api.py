@@ -1,8 +1,13 @@
 """The listings endpoints end to end: HTTP in, SQL Server underneath."""
 
+import logging
+
 import pytest
+from fastapi.testclient import TestClient
 
 from app import db, repository
+from app.config import Settings
+from app.main import create_app
 
 JACKET = {
     "title": "Denim jacket",
@@ -156,11 +161,6 @@ def test_database_failure_is_a_clean_503(client, monkeypatch):
 
 
 def test_unexpected_error_is_a_500_without_a_stack_trace(database_url, conn, monkeypatch):
-    from fastapi.testclient import TestClient
-
-    from app.config import Settings
-    from app.main import create_app
-
     def explode(*args, **kwargs):
         raise RuntimeError("boom: internal detail")
 
@@ -171,3 +171,51 @@ def test_unexpected_error_is_a_500_without_a_stack_trace(database_url, conn, mon
     assert response.status_code == 500
     assert response.json() == {"detail": "Something went wrong on our side."}
     assert "boom" not in response.text
+
+
+def test_an_id_too_large_for_the_database_is_422_not_an_outage(client):
+    too_large = 2_147_483_648
+    assert client.get(f"/listings/{too_large}").status_code == 422
+    assert client.delete(f"/listings/{too_large}").status_code == 422
+    assert client.get("/listings/0").status_code == 422
+
+
+def test_text_is_measured_the_way_the_database_stores_it(client):
+    # An emoji is one character to Python but two units in NVARCHAR.
+    assert post(client, title="📚" * 40).status_code == 201
+    assert post(client, title="📚" * 41).status_code == 422
+    assert post(client, owner_name="🙂" * 21).status_code == 422
+
+
+def test_a_constraint_violation_is_422_not_an_outage(client, monkeypatch):
+    def violate(*args, **kwargs):
+        raise db.IntegrityError("The INSERT statement conflicted with the CHECK constraint ck_listings_value")
+
+    monkeypatch.setattr(repository, "create_listing", violate)
+    response = post(client)
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Those values were not accepted."}
+    assert "ck_listings_value" not in response.text
+
+
+def test_a_500_still_carries_cors_headers(database_url, conn, monkeypatch):
+    def explode(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(repository, "list_listings", explode)
+    app = create_app(Settings(database_url=database_url, cors_origins=("http://localhost:8080",)))
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.get("/listings", headers={"Origin": "http://localhost:8080"})
+    assert response.status_code == 500
+    assert response.headers["access-control-allow-origin"] == "http://localhost:8080"
+
+
+def test_a_crafted_path_cannot_forge_a_log_line(client, caplog):
+    forged = "/listings/x%0Aservice=listings method=POST path=/listings status=500 duration_ms=9999"
+    with caplog.at_level(logging.INFO, logger="listings"):
+        client.get(forged)
+    lines = [record.getMessage() for record in caplog.records if record.name == "listings"]
+    assert len(lines) == 1
+    assert "\n" not in lines[0]
+    assert lines[0].count("service=listings ") == 1
+    assert " status=500 " not in lines[0]

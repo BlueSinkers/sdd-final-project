@@ -4,9 +4,24 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 MAX_VALUE_EUR = 10_000
+
+# SQL Server's INT, used for every id.
+MAX_ID = 2_147_483_647
+
+
+def fits_column(max_units: int):
+    """NVARCHAR(n) counts UTF-16 units, so an emoji takes two. Check the length the
+    way the database will, instead of failing later with a database error."""
+
+    def check(value: str) -> str:
+        if len(value.encode("utf-16-le")) // 2 > max_units:
+            raise ValueError(f"must fit in {max_units} characters (an emoji counts as two)")
+        return value
+
+    return AfterValidator(check)
 
 
 class Category(StrEnum):
@@ -23,9 +38,9 @@ class Status(StrEnum):
     swapped = "swapped"
 
 
-Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
-OwnerName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)]
-Description = Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)]
+Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80), fits_column(80)]
+OwnerName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40), fits_column(40)]
+Description = Annotated[str, StringConstraints(strip_whitespace=True, max_length=500), fits_column(500)]
 
 
 class ListingIn(BaseModel):
