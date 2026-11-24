@@ -25,3 +25,4 @@ you checked or changed yourself.
 | 2026-11-24 | Abhiram Kidambi | Claude Code | limit and offset on GET /listings (#30) | 3 new tests, run in CI against SQL Server; not run locally |
 | 2026-11-24 | Abhiram Kidambi | Claude Code | Connection pool in both services (#31) | 9 new tests per service, run in CI against SQL Server; latency gain not measured against Azure |
 | 2026-11-24 | Abhiram Kidambi | Claude Code | Migrate CD workflow from service principal to OIDC authentication with managed identity | Workflow syntax checked; OIDC subjects for environment and ref verified against Azure docs; not run against Azure before this PR |
+| 2026-11-24 | Serge Hagopian | Claude Code | New look for the UI in a clean dashboard style (white panels, thin borders, one blue), following a reference the team picked; CSS only (`ui/style.css`) | 27 UI tests still pass; clicked through the board, the swap dialog and the phone layout in a browser against the local services |
