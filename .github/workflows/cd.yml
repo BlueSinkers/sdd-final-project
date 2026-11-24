@@ -1,11 +1,13 @@
 name: CD
 
 # On every merge to main: run CI, push both images to GHCR tagged with the
-# commit, roll both Container Apps to that tag, publish the UI, then check
-# /health on what was deployed.
+# commit, roll both Container Apps to that tag (each service applies its own
+# migrations when it starts), check /health on what was deployed, publish the
+# UI, then run a smoke test against the public URLs.
 #
-# Run it by hand (Actions > CD > Run workflow) with an older commit SHA to roll
-# back: the images for every merged commit stay in GHCR.
+# Run it by hand (Actions > CD > Run workflow, on main) with the full SHA of an
+# older commit to roll back: the images for every merged commit stay in GHCR, and
+# the UI is published from that same commit.
 #
 # The deploy jobs are skipped until the repository variable AZURE_RESOURCE_GROUP
 # is set, so main stays green before Azure is set up. See docs/deploy.md.
@@ -15,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: Commit SHA of an image already in GHCR to deploy (leave empty to build this commit)
+        description: Full 40-character commit SHA already in GHCR to roll back to (leave empty to build this commit)
         required: false
         default: ""
 
@@ -30,6 +32,24 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  check-input:
+    name: check the rollback SHA
+    if: inputs.image_tag != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only main deploys, and only a full commit SHA is a valid image tag
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "Run this workflow on main, not on $GITHUB_REF" >&2
+            exit 1
+          fi
+          if ! echo "$IMAGE_TAG" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "image_tag must be the full 40-character commit SHA" >&2
+            exit 1
+          fi
+
   ci:
     if: inputs.image_tag == ''
     uses: ./.github/workflows/ci.yml
@@ -68,9 +88,10 @@ jobs:
 
   deploy-services:
     name: deploy ${{ matrix.service }}
-    needs: images
+    needs: [images, check-input]
     # Runs after a fresh build, or directly on a manual rollback (images skipped).
-    if: ${{ !cancelled() && !failure() && vars.AZURE_RESOURCE_GROUP != '' }}
+    # Never from a branch other than main.
+    if: ${{ !cancelled() && !failure() && github.ref == 'refs/heads/main' && vars.AZURE_RESOURCE_GROUP != '' }}
     runs-on: ubuntu-latest
     environment: production
     strategy:
@@ -83,8 +104,11 @@ jobs:
             app: ${{ vars.SWAPS_APP }}
     steps:
       - name: Image to deploy
+        env:
+          # Passed through the environment, never pasted into the script text.
+          WANTED_TAG: ${{ inputs.image_tag || github.sha }}
         run: |
-          TAG="${{ inputs.image_tag || github.sha }}"
+          TAG="$WANTED_TAG"
           echo "TAG=$TAG" >> "$GITHUB_ENV"
           echo "IMAGE=${REGISTRY}/${GITHUB_REPOSITORY,,}-${{ matrix.service }}:$TAG" >> "$GITHUB_ENV"
       - uses: azure/login@v2
@@ -121,11 +145,14 @@ jobs:
   deploy-ui:
     name: deploy UI
     needs: deploy-services
-    if: ${{ !cancelled() && !failure() && vars.AZURE_RESOURCE_GROUP != '' }}
+    if: ${{ !cancelled() && !failure() && github.ref == 'refs/heads/main' && vars.AZURE_RESOURCE_GROUP != '' }}
     runs-on: ubuntu-latest
     environment: production
     steps:
       - uses: actions/checkout@v4
+        with:
+          # On a rollback, publish the UI of the commit being rolled back to, not of HEAD.
+          ref: ${{ inputs.image_tag || github.sha }}
       - uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
@@ -135,11 +162,16 @@ jobs:
             az containerapp show --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" --name "$1" \
               --query properties.configuration.ingress.fqdn --output tsv
           }
+          # Resolve both first: a failed lookup must stop the deploy, not publish
+          # a page that points at "https://".
+          LISTINGS_HOST=$(url "${{ vars.LISTINGS_APP }}")
+          SWAPS_HOST=$(url "${{ vars.SWAPS_APP }}")
+          test -n "$LISTINGS_HOST" && test -n "$SWAPS_HOST"
           cat > ui/config.js <<CONFIG
           // Written by the deploy pipeline. Local values are in the repository.
           window.THRIFT_CONFIG = {
-            listingsUrl: "https://$(url "${{ vars.LISTINGS_APP }}")",
-            swapsUrl: "https://$(url "${{ vars.SWAPS_APP }}")",
+            listingsUrl: "https://${LISTINGS_HOST}",
+            swapsUrl: "https://${SWAPS_HOST}",
             timeoutMs: 8000,
             retryMs: 10000,
           };
@@ -152,3 +184,33 @@ jobs:
           app_location: ui
           skip_app_build: true
           skip_api_build: true
+
+  smoke:
+    name: smoke test the deployed system
+    needs: deploy-ui
+    if: ${{ !cancelled() && !failure() && github.ref == 'refs/heads/main' && vars.AZURE_RESOURCE_GROUP != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Find the public URLs
+        run: |
+          host() {
+            az containerapp show --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" --name "$1" \
+              --query properties.configuration.ingress.fqdn --output tsv
+          }
+          LISTINGS_HOST=$(host "${{ vars.LISTINGS_APP }}")
+          SWAPS_HOST=$(host "${{ vars.SWAPS_APP }}")
+          UI_HOST=$(az staticwebapp show --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "${{ vars.STATIC_APP }}" --query defaultHostname --output tsv)
+          test -n "$LISTINGS_HOST" && test -n "$SWAPS_HOST" && test -n "$UI_HOST"
+          {
+            echo "LISTINGS_URL=https://${LISTINGS_HOST}"
+            echo "SWAPS_URL=https://${SWAPS_HOST}"
+            echo "UI_URL=https://${UI_HOST}"
+          } >> "$GITHUB_ENV"
+      # Read-only: it stores nothing in the production databases.
+      - name: The live services and the live UI answer correctly
+        run: python3 tests/e2e/flow.py deployed

@@ -3,6 +3,7 @@
     python tests/e2e/flow.py flow            both services up: post, propose, accept
     python tests/e2e/flow.py swaps-down      Swaps stopped: Listings must still work
     python tests/e2e/flow.py listings-down   Listings stopped: Swaps must still work
+    python tests/e2e/flow.py deployed        after a deploy: read-only checks, nothing is stored
 
 The services never call each other, so each one has to keep working alone.
 """
@@ -148,8 +149,34 @@ def listings_down() -> None:
     expect(status == 200, "listing proposals still works")
 
 
+def deployed() -> None:
+    """Smoke test for the live system. It must not leave test data behind, so it only
+    reads, and checks the write paths with requests that validation refuses."""
+    wait_until_up(LISTINGS, seconds=240)  # scale to zero and a paused database: allow a cold start
+    wait_until_up(SWAPS, seconds=240)
+    status, listings = call("GET", f"{LISTINGS}/listings")
+    expect(status == 200 and isinstance(listings, list), "GET /listings returns a list")
+    status, _ = call("POST", f"{LISTINGS}/listings", {"title": ""})
+    expect(status == 422, "POST /listings refuses an invalid listing with 422")
+    status, _ = call("GET", f"{LISTINGS}/listings/2147483647")
+    expect(status == 404, "an unknown listing is 404")
+    status, swaps = call("GET", f"{SWAPS}/swaps?limit=1")
+    expect(status == 200 and isinstance(swaps, list), "GET /swaps returns a list")
+    item = {"listing_id": 1, "title": "smoke", "owner_name": "smoke", "condition": 3, "estimated_value": 10}
+    status, _ = call("POST", f"{SWAPS}/swaps", {"proposer_name": "smoke", "offered": item, "requested": item})
+    expect(status == 422, "POST /swaps refuses a listing swapped for itself with 422")
+
+    ui = os.environ.get("UI_URL")
+    if ui:
+        with urllib.request.urlopen(f"{ui}/", timeout=TIMEOUT_S) as response:
+            expect(response.status == 200 and b"Thrift-Swap Board" in response.read(), "the UI page loads")
+        with urllib.request.urlopen(f"{ui}/config.js", timeout=TIMEOUT_S) as response:
+            config = response.read().decode()
+        expect(LISTINGS in config and SWAPS in config, "the UI is configured with both deployed service URLs")
+
+
 if __name__ == "__main__":
-    scenarios = {"flow": flow, "swaps-down": swaps_down, "listings-down": listings_down}
+    scenarios = {"flow": flow, "swaps-down": swaps_down, "listings-down": listings_down, "deployed": deployed}
     if len(sys.argv) != 2 or sys.argv[1] not in scenarios:
         sys.exit(f"usage: python tests/e2e/flow.py [{' | '.join(scenarios)}]")
     scenarios[sys.argv[1]]()

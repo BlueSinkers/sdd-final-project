@@ -1,7 +1,8 @@
 # Initial Product Backlog
 
 Ordered by priority. Size: S / M / L. Each story has a GitHub issue, closed by the pull
-requests that deliver it.
+requests that deliver it. The live backlog and its status are in the repository's GitHub
+Project; this file is the initial version.
 
 | # | Story | Acceptance criteria | Size | Issue | Pull requests |
 |---|---|---|---|---|---|

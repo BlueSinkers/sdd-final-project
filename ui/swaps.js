@@ -3,7 +3,7 @@
 
 import { ApiError, RETRY_MS, listingsApi, swapsApi } from "./api.js";
 import { CONDITION_LABELS, clear, el, formatDate, formatEuros, setPill, toast } from "./dom.js";
-import { addCardAction, getListings, loadListings, renderListings } from "./listings.js";
+import { addCardAction, getListings, listingsLoaded, loadListings, onListingsChange, renderListings } from "./listings.js";
 
 const VERDICT_CLASS = { "Fair trade": "verdict-fair", Lopsided: "verdict-lopsided", "Very uneven": "verdict-uneven" };
 const VERDICT_EXPLANATION = {
@@ -19,6 +19,10 @@ const state = {
   error: null,
   retryTimer: null,
   requested: null,
+  // Counts load attempts, so an older answer never overwrites a newer one.
+  loadNumber: 0,
+  // Ids of swaps with an accept or decline request in flight.
+  deciding: new Set(),
 };
 
 const list = document.getElementById("swaps");
@@ -32,14 +36,19 @@ const available = () => state.loaded && state.error === null;
 
 export async function loadSwaps() {
   clearTimeout(state.retryTimer);
+  state.loadNumber += 1;
+  const thisLoad = state.loadNumber;
   if (!state.loaded) setPill("status-swaps", "Swap checker", "unknown");
   const wasAvailable = available();
   try {
-    state.swaps = await swapsApi.list();
+    const swaps = await swapsApi.list();
+    if (thisLoad !== state.loadNumber) return; // a newer load is already on its way
+    state.swaps = swaps;
     state.loaded = true;
     state.error = null;
     setPill("status-swaps", "Swap checker", "up");
   } catch (error) {
+    if (thisLoad !== state.loadNumber) return;
     state.error = error instanceof ApiError ? error : new ApiError("server", "Something went wrong.");
     setPill("status-swaps", "Swap checker", "down");
     // Keep trying quietly: a service that was asleep answers after a few seconds.
@@ -73,12 +82,48 @@ function side(label, item) {
   );
 }
 
+// Why a proposed swap can no longer be accepted, or null if it still can. An item
+// that was already swapped or deleted must not be traded a second time. While the
+// board has not loaded we cannot know, so we do not block.
+function blockedReason(swap) {
+  if (!listingsLoaded()) return null;
+  for (const item of [swap.offered, swap.requested]) {
+    const listing = getListings().find((candidate) => candidate.id === item.listing_id);
+    if (!listing) return `“${item.title}” is no longer on the board.`;
+    if (listing.status !== "open") return `“${item.title}” has already been swapped.`;
+  }
+  return null;
+}
+
 function row(swap) {
   const actions = el("div", { class: "swap-actions" });
   if (swap.status === "proposed") {
+    const busy = state.deciding.has(swap.id);
+    const blocked = blockedReason(swap);
+    const names = `${swap.offered.title} for ${swap.requested.title}`;
+    if (blocked) {
+      actions.append(el("span", { class: "swap-blocked", text: `Cannot be accepted: ${blocked}` }));
+    } else {
+      actions.append(
+        el("button", {
+          class: "btn btn-small",
+          type: "button",
+          text: "Accept",
+          "aria-label": `Accept swap: ${names}`,
+          disabled: busy,
+          onclick: () => decide(swap, "accepted"),
+        }),
+      );
+    }
     actions.append(
-      el("button", { class: "btn btn-small", type: "button", text: "Accept", onclick: () => decide(swap, "accepted") }),
-      el("button", { class: "btn btn-small", type: "button", text: "Decline", onclick: () => decide(swap, "declined") }),
+      el("button", {
+        class: "btn btn-small",
+        type: "button",
+        text: "Decline",
+        "aria-label": `Decline swap: ${names}`,
+        disabled: busy,
+        onclick: () => decide(swap, "declined"),
+      }),
     );
   }
   return el(
@@ -124,13 +169,19 @@ function render() {
 }
 
 async function decide(swap, status) {
+  // One request per swap at a time: a double click must not send two.
+  if (state.deciding.has(swap.id)) return;
+  state.deciding.add(swap.id);
+  render();
   try {
     await swapsApi.decide(swap.id, status);
   } catch (error) {
     toast(error instanceof ApiError ? error.message : "Something went wrong.", "error");
+    state.deciding.delete(swap.id);
     await loadSwaps();
     return;
   }
+  state.deciding.delete(swap.id);
   if (status === "declined") {
     toast("Swap declined.");
     await loadSwaps();
@@ -252,5 +303,7 @@ export function initSwaps() {
   form.elements.offered.addEventListener("change", syncProposer);
   form.addEventListener("submit", submit);
   document.getElementById("swap-cancel").addEventListener("click", () => dialog.close());
+  // Whether a proposal can still be accepted depends on the listings' status.
+  onListingsChange(render);
   return loadSwaps();
 }

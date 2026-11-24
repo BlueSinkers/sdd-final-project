@@ -2,7 +2,7 @@
 
 ## What we log
 
-Each service writes exactly one line per HTTP request to standard output:
+Each service writes exactly one line to standard output for every HTTP request it handles:
 
 ```
 service=swaps method=POST path=/swaps status=201 duration_ms=13.2
@@ -10,8 +10,11 @@ service=swaps method=POST path=/swaps status=201 duration_ms=13.2
 
 `duration_ms` is the time the service spent on the request, measured in the request
 middleware (`app/main.py`). Uvicorn's own access log is switched off in the image so there is
-one line per request, not two. Startup, migrations, database retries and errors are logged as
-ordinary lines; a stack trace goes to the log and never to the caller.
+one line per request, not two. The path is percent-encoded in the line, so a crafted URL
+cannot inject a fake request line. A browser's CORS preflight (`OPTIONS`) is answered by the
+CORS layer before it reaches the service and is not logged. Startup, migrations, database
+retries and errors are logged as ordinary lines; a stack trace goes to the log and never to
+the caller.
 
 On Azure, Container Apps sends everything written to standard output to the Log Analytics
 workspace created by `infra/setup.sh`. The lines land in the table
@@ -35,8 +38,8 @@ Azure portal, choose **Logs**, paste a query and run it.
 | `startup_and_errors.kql` | What happened at startup, and what errors were logged? |
 
 A 4xx answer (a validation error, an unknown id) is the caller's mistake and does not count
-as an error. Requests to `/health` are left out of the charts so the deploy check and the
-UI's retries do not inflate the numbers.
+as an error. Requests to `/health` are left out of the charts so the deploy pipeline's health
+check does not inflate the numbers.
 
 ## Dashboard
 

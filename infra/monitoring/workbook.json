@@ -54,12 +54,15 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "let target = 99.0;\nlet threshold_ms = 500;\nContainerAppConsoleLogs_CL\n| where TimeGenerated > ago(7d)\n| where Log_s startswith \"service=swaps \"\n| parse Log_s with \"service=\" service \" method=\" method \" path=\" path \" status=\" status:int \" duration_ms=\" duration_ms:real\n| where method == \"POST\" and path == \"/swaps\"\n| summarize total = count(), good = countif(duration_ms < threshold_ms and status < 500),\n    p50_ms = round(percentile(duration_ms, 50), 1), p99_ms = round(percentile(duration_ms, 99), 1)\n| extend achieved_percent = round(100.0 * good / total, 3)\n| extend slo_met = achieved_percent >= target\n| extend error_budget = toint(floor(total * (100.0 - target) / 100.0))\n| extend budget_left = error_budget - (total - good)\n| project total, good, achieved_percent, target, slo_met, p50_ms, p99_ms, error_budget, budget_left",
+        "query": "let target = 99.0;\nlet threshold_ms = 500;\nContainerAppConsoleLogs_CL\n| where TimeGenerated > ago(7d)\n| where Log_s startswith \"service=swaps \"\n| parse Log_s with \"service=\" service \" method=\" method \" path=\" path \" status=\" status:int \" duration_ms=\" duration_ms:real\n| where method == \"POST\" and path == \"/swaps\"\n| summarize total = count(), good = countif(duration_ms < threshold_ms and status < 500),\n    p50_ms = round(percentile(duration_ms, 50), 1), p99_ms = round(percentile(duration_ms, 99), 1)\n| extend achieved_percent = iff(total == 0, 100.0, round(100.0 * good / total, 3))\n| extend target_percent = target\n| extend slo_met = achieved_percent >= target_percent\n| extend error_budget = toint(floor(total * (100.0 - target_percent) / 100.0, 1))\n| extend budget_left = error_budget - (total - good)\n| project total, good, achieved_percent, target_percent, slo_met, p50_ms, p99_ms, error_budget, budget_left",
         "size": 4,
         "title": "SLO: 99% of POST /swaps under 500 ms (last 7 days)",
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
-        "visualization": "table"
+        "visualization": "table",
+        "timeContext": {
+          "durationMs": 604800000
+        }
       },
       "name": "SLO: 99% of POST /swaps under 500 ms (last 7 days)"
     },
@@ -126,7 +129,10 @@
         "title": "SLO per day",
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
-        "visualization": "table"
+        "visualization": "table",
+        "timeContext": {
+          "durationMs": 604800000
+        }
       },
       "name": "SLO per day",
       "customWidth": "50",
