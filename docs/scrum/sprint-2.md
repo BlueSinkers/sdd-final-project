@@ -48,7 +48,7 @@ By our Definition of Done an item is Done only when it is merged to `main` and d
 
 ## Review (25-26 Nov)
 
-**Presentation (Canva):** https://canva.link/x5zzke3budm6904
+**Presentation:** https://docs.google.com/presentation/d/1bdUEQlmvCK8P_BsxAzIpw8sc_c8KaEuhRvUA44whngY/edit?usp=sharing
 
 **Live demo:** https://kind-forest-0330c0b03.8.azurestaticapps.net
 

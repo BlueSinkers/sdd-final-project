@@ -28,5 +28,5 @@ you checked or changed yourself.
 | 2026-11-24 | Abhiram Kidambi | Claude Code | Fill Scrum sprint roles, retrospectives, Sprint 2 Done checklist, live URL in README (incl. Rodrigo) | Roles proposed from who did what; team to confirm before Review |
 | 2026-11-24 | Abhiram Kidambi | Claude Code | Document live Azure URL and production endpoints in README and deploy.md | URLs checked with curl /health and smoke test earlier the same day |
 | 2026-11-24 | Abhiram Kidambi | Claude Code | Install monitoring workbook in Azure and record production Log Analytics observations | Workbook resource created; request count, error rate, latency and SLO queries run on real logs |
-| 2026-11-24 | Abhiram Kidambi | Claude Code | Add Sprint Review Canva presentation link to README and sprint-2 docs | Link provided by the team |
+| 2026-11-24 | Abhiram Kidambi | Claude Code | Add Sprint Review presentation link (Google Slides) to README and sprint-2 docs | Link provided by the team |
 | 2026-11-24 | Serge Hagopian | Claude Code | Accounts: sign up, log in, signed tokens checked by both services, ownership rules on listings and swaps, one-click demo accounts, the sign-in dialog in the UI | 93 Listings and 125 Swaps tests against SQL Server, 30 UI tests, the end-to-end flow; signed in and proposed a swap in a browser. Not run on Azure |
