@@ -51,6 +51,33 @@ To install it: Azure portal > the Log Analytics workspace > **Workbooks** > **Ne
 **Advanced Editor** button (`</>`) > paste the file's contents > **Apply** > **Save**. Pick the
 time range with the pills at the top.
 
+**Installed in our resource group** as a shared workbook named **Thrift-Swap Board**
+(resource id ends with `.../microsoft.insights/workbooks/615b97fb-b841-444d-a23b-de5f6dc969b0`).
+Open it from: Azure portal > resource group `rg-sdd-3b-g1` > the workbook, or from the
+`sdd-3b-g1-logs` workspace > **Workbooks**.
+
+## Observations from production (2026-11-24)
+
+Ran each query in `infra/monitoring/` against the real `sdd-3b-g1-logs` workspace after the
+first go-live (commit `dfe9083…`). Numbers below are from Log Analytics for the last ~24 hours
+unless noted. Traffic is still light (smoke test + manual checks), so treat this as a first
+baseline, not a full week of SLO evidence.
+
+| Check | Result |
+|---|---|
+| Logs arriving | Yes. Both Container Apps write to `ContainerAppConsoleLogs_CL`. |
+| Log line parse | Yes. Lines match `service=… method=… path=… status=… duration_ms=…`. |
+| Request count (excl. `/health`) | listings 22, swaps 22 |
+| 5xx error rate | 0% on both services |
+| 4xx (caller errors) | listings 2, swaps 1 (validation / unknown id from smoke tests) |
+| Response time (excl. `/health`) | listings p50 8.1 ms, p95 58.1 ms, p99 101.8 ms; swaps p50 4.5 ms, p95 60.8 ms, p99 75.5 ms |
+| SLO (`POST /swaps`, 7 days) | **met** — 2 of 2 good (100%), p50 6.7 ms, p99 18.6 ms; error budget 0 because volume is still tiny |
+| Workbook | Installed and linked to `sdd-3b-g1-logs` |
+
+Busiest endpoints so far: `GET /listings` and `GET /swaps` (browse). `POST /swaps` only has
+the smoke-test volume; re-check `slo_swaps.kql` after the Sprint Review demo when there is
+more traffic.
+
 ## The SLO
 
 > **99% of `POST /swaps` requests complete in under 500 ms, measured over 7 days.**
