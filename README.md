@@ -12,14 +12,15 @@ When someone proposes a swap, the app tells them how fair the trade is:
 |---|---|---|
 | Abhiram Kidambi | @BlueSinkers | Sprint 0 setup, project docs, reviews, Azure deploy / OIDC |
 | Serge Hagopian | @SergeGod | Listings, Swaps, UI, CI/CD, monitoring |
+| Rodrigo Martínez Casaú | @RodrigoMartinezCasau | UI restyle, reviews |
 
-Scrum roles (Product Owner and Scrum Master) rotate each sprint. Holders:
+Scrum roles (Product Owner and Scrum Master) rotate each sprint; everyone is a Developer. Holders:
 
 | Sprint | Product Owner | Scrum Master |
 |---|---|---|
 | 0 | Serge Hagopian | Abhiram Kidambi |
-| 1 | Abhiram Kidambi | Serge Hagopian |
-| 2 | Serge Hagopian | Abhiram Kidambi |
+| 1 | Abhiram Kidambi | Rodrigo Martínez Casaú |
+| 2 | Rodrigo Martínez Casaú | Serge Hagopian |
 
 Outcomes per sprint are in [`docs/scrum/`](docs/scrum/). The backlog lives as GitHub issues
 (#3–#12) plus [`docs/product-backlog.md`](docs/product-backlog.md). Create the GitHub Project

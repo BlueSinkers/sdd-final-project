@@ -1,7 +1,8 @@
 # Sprint 2 (19-24 Nov 2026): MVP complete, monitoring, documentation
 
-- **Product Owner:** Serge Hagopian
-- **Scrum Master:** Abhiram Kidambi
+- **Product Owner:** Rodrigo Martínez Casaú
+- **Scrum Master:** Serge Hagopian
+- **Developers:** Abhiram Kidambi, Serge Hagopian, Rodrigo Martínez Casaú
 - **Sprint Goal:** A working two-service product that deploys itself to Azure and can be
   monitored, with its documentation, by Tue 24 Nov 23:59.
 
@@ -27,6 +28,7 @@ Story numbers are from [`../product-backlog.md`](../product-backlog.md).
 | Fixes from an independent code review | - | #23 | Done (merged) |
 | Alignment with the assignment brief | - | #24 | Done (merged) |
 | Review follow-ups (pooling, CSP, paging, accept guard, docs) | - | #25–#34 | Done (merged via #34) |
+| UI restyle | - | #44 | In review / merged as applicable |
 
 ## Done means deployed
 

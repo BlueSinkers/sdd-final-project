@@ -1,7 +1,8 @@
 # Sprint 1 (11-18 Nov 2026): deployed skeleton and first feature
 
 - **Product Owner:** Abhiram Kidambi
-- **Scrum Master:** Serge Hagopian
+- **Scrum Master:** Rodrigo Martínez Casaú
+- **Developers:** Abhiram Kidambi, Serge Hagopian, Rodrigo Martínez Casaú
 - **Sprint Goal:** The skeleton deployed to Azure by the pipeline, then the first core
   feature working end to end.
 
