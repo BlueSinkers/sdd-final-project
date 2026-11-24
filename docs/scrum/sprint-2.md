@@ -39,12 +39,12 @@ By our Definition of Done an item is Done only when it is merged to `main` and d
 - [x] First deploy green; live URL in the README.
 - [x] Each query in `infra/monitoring/` run against real logs; dashboard installed (workbook **Thrift-Swap Board** in `rg-sdd-3b-g1`).
 - [x] Roles, reviews and retrospective agreements filled in for all three sprints.
-- [ ] `main` tagged `submission`; URL and SHA submitted on Blackboard (after this PR merges).
+- [x] Tagged `submission` (commit `ca5e245`); merge this PR to `main`, then submit the live URL + SHA on Blackboard.
 
 ## Items not done
 
 - GitHub Projects board was not created during the sprint (issues + `product-backlog.md` used instead). Create the board before the Review (commands in the README).
-- `submission` tag and Blackboard URL/SHA still outstanding until this PR is on `main`.
+- Blackboard URL/SHA submission still outstanding (team action).
 
 ## Review (25-26 Nov)
 
