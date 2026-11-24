@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from app import repository
 from app.db import Connection, get_conn
 from app.fairness import adjusted_value, fairness_score, verdict_for
-from app.models import MAX_ID, DecisionIn, Swap, SwapIn
+from app.models import MAX_ID, DecisionIn, Status, Swap, SwapIn
 
 router = APIRouter(prefix="/swaps", tags=["swaps"])
 
@@ -48,6 +48,11 @@ def decide_swap(swap_id: SwapId, data: DecisionIn, conn: Connection = Depends(ge
     decided = repository.decide_swap(conn, swap_id, data.status)
     if decided is not None:
         return decided
-    if repository.get_swap(conn, swap_id) is None:
+    swap = repository.get_swap(conn, swap_id)
+    if swap is None:
         raise HTTPException(status_code=404, detail="Swap not found.")
-    raise HTTPException(status_code=409, detail="This swap was already accepted or declined.")
+    if swap.status != Status.proposed:
+        raise HTTPException(status_code=409, detail="This swap was already accepted or declined.")
+    # Still proposed, yet it could not be accepted: an item in it is already in another
+    # accepted swap. It can still be declined.
+    raise HTTPException(status_code=409, detail="One of these items is already part of another accepted swap.")

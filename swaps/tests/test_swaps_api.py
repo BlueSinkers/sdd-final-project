@@ -1,5 +1,8 @@
 """The swaps endpoints end to end: HTTP in, SQL Server underneath."""
 
+import time
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -226,3 +229,88 @@ def test_a_500_still_carries_cors_headers(database_url, conn, monkeypatch):
         response = client.get("/swaps", headers={"Origin": "http://localhost:8080"})
     assert response.status_code == 500
     assert response.headers["access-control-allow-origin"] == "http://localhost:8080"
+
+
+# --- one item cannot end up in two accepted swaps ---------------------------------------
+# The Swaps service never asks the Listings service whether an item is still open (ADR-1),
+# so it protects itself with what it knows: the swaps it has already accepted.
+
+ATLAS = {"listing_id": 9, "title": "Atlas", "owner_name": "Mia", "condition": 3, "estimated_value": 25}
+
+
+def decide(client, swap, status):
+    return client.patch(f"/swaps/{swap['id']}/status", json={"status": status})
+
+
+def test_two_swaps_sharing_an_item_cannot_both_be_accepted(client):
+    jacket_for_lamp = propose(client, JACKET, LAMP).json()
+    book_for_lamp = propose(client, BOOK, LAMP).json()
+    assert decide(client, jacket_for_lamp, "accepted").status_code == 200
+    blocked = decide(client, book_for_lamp, "accepted")
+    assert blocked.status_code == 409
+    assert blocked.json()["detail"] == "One of these items is already part of another accepted swap."
+    assert client.get(f"/swaps/{book_for_lamp['id']}").json()["status"] == "proposed"
+    # It is not stuck: it can still be declined, and the message for a decided swap is unchanged.
+    assert decide(client, book_for_lamp, "declined").status_code == 200
+    again = decide(client, jacket_for_lamp, "declined")
+    assert again.status_code == 409
+    assert again.json()["detail"] == "This swap was already accepted or declined."
+
+
+def test_the_shared_item_can_be_on_either_side(client):
+    first = propose(client, JACKET, LAMP).json()
+    second = propose(client, LAMP, BOOK).json()  # the lamp is now the offered item
+    assert decide(client, first, "accepted").status_code == 200
+    assert decide(client, second, "accepted").status_code == 409
+
+
+def test_swaps_that_share_nothing_can_both_be_accepted(client):
+    first = propose(client, JACKET, LAMP).json()
+    second = propose(client, BOOK, ATLAS).json()
+    assert decide(client, first, "accepted").status_code == 200
+    assert decide(client, second, "accepted").status_code == 200
+
+
+def test_a_declined_swap_does_not_block_anything(client):
+    first = propose(client, JACKET, LAMP).json()
+    second = propose(client, BOOK, LAMP).json()
+    assert decide(client, first, "declined").status_code == 200
+    assert decide(client, second, "accepted").status_code == 200
+
+
+def test_declining_is_never_blocked(client):
+    first = propose(client, JACKET, LAMP).json()
+    second = propose(client, BOOK, LAMP).json()
+    assert decide(client, first, "accepted").status_code == 200
+    assert decide(client, second, "declined").status_code == 200
+
+
+def test_an_item_that_was_swapped_and_reopened_can_be_proposed_again(client):
+    old = propose(client, JACKET, LAMP).json()
+    assert decide(client, old, "accepted").status_code == 200
+    time.sleep(0.05)  # the new proposal is made after the old swap was decided
+    new = propose(client, BOOK, LAMP).json()
+    assert decide(client, new, "accepted").status_code == 200
+
+
+def test_two_accepts_at_the_same_moment_cannot_both_win(client):
+    for _ in range(5):
+        first = propose(client, JACKET, LAMP).json()
+        second = propose(client, BOOK, LAMP).json()
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            codes = sorted(
+                r.status_code for r in pool.map(lambda swap: decide(client, swap, "accepted"), [first, second])
+            )
+        assert codes == [200, 409]
+        # An accepted swap from this round would block the next round's items; start clean.
+        _forget_accepted(client)
+
+
+def _forget_accepted(client):
+    """Test helper: start the next round with no accepted swaps, straight in the database."""
+    conn = db.connect(client.app.state.settings.database_url)
+    try:
+        with conn:
+            conn.execute("DELETE FROM swaps")
+    finally:
+        conn.close()
