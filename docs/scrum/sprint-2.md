@@ -28,7 +28,7 @@ Story numbers are from [`../product-backlog.md`](../product-backlog.md).
 | Fixes from an independent code review | - | #23 | Done (merged) |
 | Alignment with the assignment brief | - | #24 | Done (merged) |
 | Review follow-ups (pooling, CSP, paging, accept guard, docs) | - | #25–#34 | Done (merged via #34) |
-| UI restyle | - | #44 | In review / merged as applicable |
+| UI restyle | - | #44 | Open (UI) |
 
 ## Done means deployed
 
