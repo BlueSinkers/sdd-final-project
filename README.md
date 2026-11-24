@@ -22,15 +22,29 @@ Azure resource group: `rg-sdd-3b-g1` (prefix `sdd-3b-g1`, West Europe). First re
 
 | Member | GitHub | Area |
 |---|---|---|
-| Abhiram Kidambi | @BlueSinkers | Sprint 0 setup, project docs, reviews |
+| Abhiram Kidambi | @BlueSinkers | Sprint 0 setup, project docs, reviews, Azure deploy / OIDC |
 | Serge Hagopian | @SergeGod | Listings, Swaps, UI, CI/CD, monitoring |
+| Rodrigo Martínez Casaú | @RodrigoMartinezCasau | UI restyle, reviews |
 
-_Add every other team member here with their GitHub username._
+Scrum roles (Product Owner and Scrum Master) rotate each sprint; everyone is a Developer. Holders:
 
-Scrum roles (Product Owner and Scrum Master) rotate each sprint. The holders and the
-outcome of each sprint are in [`docs/scrum/`](docs/scrum/). The backlog is the GitHub
-Project of this repository. Everyone must understand the
-whole system.
+| Sprint | Product Owner | Scrum Master |
+|---|---|---|
+| 0 | Serge Hagopian | Abhiram Kidambi |
+| 1 | Abhiram Kidambi | Rodrigo Martínez Casaú |
+| 2 | Rodrigo Martínez Casaú | Serge Hagopian |
+
+Outcomes per sprint are in [`docs/scrum/`](docs/scrum/). The backlog lives as GitHub issues
+(#3–#12) plus [`docs/product-backlog.md`](docs/product-backlog.md). Create the GitHub Project
+board (required by the brief) with:
+
+```bash
+gh project create --owner BlueSinkers --title "Thrift-Swap Board Backlog"
+# then add issues #3–#12 to that project from the issue sidebar or:
+# gh project item-add <number> --owner BlueSinkers --url https://github.com/BlueSinkers/sdd-final-project/issues/<n>
+```
+
+Everyone must understand the whole system.
 
 ## Architecture
 
