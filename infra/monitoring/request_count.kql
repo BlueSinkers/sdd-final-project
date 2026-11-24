@@ -1,0 +1,7 @@
+// Requests per service in 5-minute buckets (health checks left out).
+ContainerAppConsoleLogs_CL
+| where Log_s startswith "service="
+| parse Log_s with "service=" service " method=" method " path=" path " status=" status:int " duration_ms=" duration_ms:real
+| where isnotnull(status) and path != "/health"
+| summarize requests = count() by service, bin(TimeGenerated, 5m)
+| render timechart
