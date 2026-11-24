@@ -37,19 +37,24 @@ By our Definition of Done an item is Done only when it is merged to `main` and d
 - [x] Merge the pull requests into `main`, lowest number first, with merge commits.
 - [x] Run `infra/setup.sh` and set the GitHub variables and secrets (`docs/deploy.md`).
 - [x] First deploy green; live URL in the README.
-- [ ] Each query in `infra/monitoring/` run against real logs; dashboard installed (do before / during Sprint Review).
+- [x] Each query in `infra/monitoring/` run against real logs; dashboard installed (workbook **Thrift-Swap Board** in `rg-sdd-3b-g1`).
 - [x] Roles, reviews and retrospective agreements filled in for all three sprints.
-- [ ] `main` tagged `submission`; URL and SHA submitted on Blackboard.
+- [x] Tagged `submission` on this branch tip; merge this PR to `main`, then submit the live URL + `git rev-parse submission` SHA on Blackboard.
 
 ## Items not done
 
 - GitHub Projects board was not created during the sprint (issues + `product-backlog.md` used instead). Create the board before the Review (commands in the README).
-- Log Analytics workbook not yet imported into the Azure portal; KQL files are in the repo and ready to paste.
-- `submission` tag and Blackboard URL/SHA still outstanding at the time of writing.
+- Blackboard URL/SHA submission still outstanding (team action).
 
 ## Review (25-26 Nov)
 
-_Filled in after the Sprint Review: what was demonstrated and the feedback received._
+**Presentation:** https://docs.google.com/presentation/d/1bdUEQlmvCK8P_BsxAzIpw8sc_c8KaEuhRvUA44whngY/edit?usp=sharing
+
+**Live demo:** https://kind-forest-0330c0b03.8.azurestaticapps.net
+
+**Monitoring workbook:** Azure portal → `rg-sdd-3b-g1` → workbook **Thrift-Swap Board**
+
+_Filled in after the Sprint Review: feedback received from the class._
 
 ## Retrospective agreements
 
