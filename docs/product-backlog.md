@@ -1,8 +1,11 @@
 # Initial Product Backlog
 
 Ordered by priority. Size: S / M / L. Each story has a GitHub issue, closed by the pull
-requests that deliver it. The live backlog and its status are in the repository's GitHub
-Project; this file is the initial version.
+requests that deliver it. This file is the initial backlog. The live board should be a
+GitHub Project named **Thrift-Swap Board Backlog** (create with
+`gh project create --owner BlueSinkers --title "Thrift-Swap Board Backlog"` and add issues
+#3–#12). Until that board exists, status is tracked on the issues and in
+[`docs/scrum/sprint-2.md`](scrum/sprint-2.md).
 
 | # | Story | Acceptance criteria | Size | Issue | Pull requests |
 |---|---|---|---|---|---|
