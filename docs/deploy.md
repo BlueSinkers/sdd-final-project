@@ -101,6 +101,28 @@ written, so check these first:
 | Service restarts in a loop right after an idle period | The database was still resuming while the service waited to start. Open the app URL again after a minute, or set `--min-replicas 1` for the demo |
 | CD health check times out | Run `infra/monitoring/startup_and_errors.kql` to see why the new revision did not start |
 
+## Security notes
+
+Things that are deliberately not as tight as they could be, and what to do about them:
+
+- **SQL firewall.** `infra/setup.sh` creates the rule `AllowAzureServices` (`0.0.0.0`), which
+  lets any Azure service reach the SQL server, not only our two apps. The server still needs
+  a valid user and password, and each service's user exists only inside its own database. We
+  accepted this because Container Apps on the Consumption plan have no fixed outbound
+  address we could allow instead. Tighter option: a VNet-integrated environment with a
+  private endpoint, which costs more and was out of scope.
+- **Approval before deploy.** The deploy jobs use the GitHub environment `production`, but a
+  new environment has no protection rules. To require a person to approve each deploy:
+  GitHub > Settings > Environments > `production` > **Required reviewers**. Without it, every
+  merge to `main` deploys on its own.
+- **Browser protections.** `ui/staticwebapp.config.json` sets a Content-Security-Policy and
+  other headers on the deployed UI. If the live page ever loads blank, open the browser
+  console: a CSP violation names the blocked address, and the usual fix is adding it to
+  `connect-src` in that file.
+- **Keeping pins current.** Actions are pinned to commit SHAs and `.github/dependabot.yml`
+  opens weekly update PRs for them and for the Python dependencies. The SQL Server image used
+  in CI is still `2022-latest`.
+
 ## Cold starts
 
 Both Container Apps scale to zero and both databases pause when idle, to stay inside the
