@@ -84,7 +84,7 @@ Listings (`http://localhost:8001`, interactive docs at `/docs`):
 | Method | Path | Result |
 |---|---|---|
 | GET | `/health` | 200 when the service and its database answer, 503 otherwise |
-| GET | `/listings` | all listings, newest first; `?status=open`, `?category=books` |
+| GET | `/listings` | listings, newest first; `?status=open`, `?category=books`; `?limit=` (1-500, default 200) and `?offset=` |
 | POST | `/listings` | 201 with the created listing; 422 if invalid |
 | GET | `/listings/{id}` | one listing or 404 |
 | PUT | `/listings/{id}` | replaces the listing, keeps its status |
@@ -99,7 +99,7 @@ Swaps (`http://localhost:8002`, interactive docs at `/docs`):
 | POST | `/swaps` | 201 with the stored proposal, its fairness score and verdict |
 | GET | `/swaps` | recent proposals, newest first; `?limit=`, `?listing_id=` |
 | GET | `/swaps/{id}` | one proposal or 404 |
-| PATCH | `/swaps/{id}/status` | `accepted` or `declined`; 409 if already decided |
+| PATCH | `/swaps/{id}/status` | `accepted` or `declined`; 409 if already decided, or if accepting would put an item in two accepted swaps |
 
 ## Run locally
 
