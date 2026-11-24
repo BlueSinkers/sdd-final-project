@@ -1,6 +1,8 @@
 """SQL Server access: connections from DATABASE_URL, retries and versioned migrations."""
 
+import contextlib
 import logging
+import queue
 import re
 import time
 from collections.abc import Iterator
@@ -126,10 +128,81 @@ def ping(conn: Connection) -> None:
     conn.execute("SELECT 1 AS ok").fetchone()
 
 
+def _close_quietly(conn: Connection) -> None:
+    with contextlib.suppress(DatabaseError):
+        conn.close()
+
+
+class ConnectionPool:
+    """Reuses idle connections instead of logging in to SQL Server on every request.
+
+    A login to Azure SQL costs far more than a query, and the SLO is 500 ms for a request
+    that makes one. Rules that keep reuse safe:
+    - a connection goes back only after a rollback, so no transaction stays open on it
+    - one that sat idle a while is pinged before use, and replaced if it no longer answers
+    - one that sat idle too long is dropped (the database or the network may have closed it)
+    - one whose request failed with a database error is thrown away, never reused
+    - at most `max_idle` are kept; beyond that connections are closed as before
+    """
+
+    def __init__(self, database_url: str, max_idle: int = 5, ping_after: float = 5.0, max_age: float = 240.0):
+        self._database_url = database_url
+        self._max_idle = max_idle
+        self._ping_after = ping_after
+        self._max_age = max_age
+        self._idle: queue.LifoQueue[tuple[Connection, float]] = queue.LifoQueue()
+
+    def acquire(self) -> Connection:
+        while True:
+            try:
+                conn, idle_since = self._idle.get_nowait()
+            except queue.Empty:
+                return connect(self._database_url)
+            idle = time.monotonic() - idle_since
+            if idle > self._max_age:
+                _close_quietly(conn)
+                continue
+            if idle > self._ping_after:
+                try:
+                    ping(conn)
+                except DatabaseError:
+                    _close_quietly(conn)
+                    continue
+            return conn
+
+    def release(self, conn: Connection, reusable: bool = True) -> None:
+        if not reusable or self._idle.qsize() >= self._max_idle:
+            _close_quietly(conn)
+            return
+        try:
+            conn.rollback()
+        except DatabaseError:
+            _close_quietly(conn)
+            return
+        self._idle.put((conn, time.monotonic()))
+
+    def close(self) -> None:
+        while True:
+            try:
+                conn, _ = self._idle.get_nowait()
+            except queue.Empty:
+                return
+            _close_quietly(conn)
+
+
 def get_conn(request: Request) -> Iterator[Connection]:
-    """FastAPI dependency: one connection per request, always closed afterwards."""
-    conn = connect(request.app.state.settings.database_url)
+    """FastAPI dependency: one connection per request, from the pool and always given back."""
+    pool: ConnectionPool = request.app.state.pool
+    conn = pool.acquire()
     try:
         yield conn
-    finally:
-        conn.close()
+    except DatabaseError:
+        # Do not reuse a connection that just failed: it may be broken.
+        pool.release(conn, reusable=False)
+        raise
+    except BaseException:
+        # Some other error (a 404, a bug): the connection itself is fine.
+        pool.release(conn)
+        raise
+    else:
+        pool.release(conn)
