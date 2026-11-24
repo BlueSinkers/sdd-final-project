@@ -1,0 +1,16 @@
+# Keeps the pinned action SHAs and the pinned Python dependencies current.
+# Each update arrives as a pull request, which runs CI like any other change.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: pip
+    directory: /listings
+    schedule:
+      interval: weekly
+  - package-ecosystem: pip
+    directory: /swaps
+    schedule:
+      interval: weekly
