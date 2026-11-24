@@ -40,20 +40,48 @@ Each service connects with its own database user, which exists only inside its o
 ## One-time setup
 
 1. Merge to `main` once so CD pushes the two images to GHCR. The deploy jobs are skipped
-   until step 4, so this run is green.
+   until step 5, so this run is green.
 2. Make both packages public (GitHub > the organisation or user > Packages > the package >
    Package settings > Change visibility). The images contain no secrets, and the Container
    Apps pull them without credentials.
-3. Create the Azure resources:
+3. Set up federated credentials for OIDC authentication. Each group has a user-assigned
+   managed identity `sdd-<class>-g<N>-github` in the resource group. Create one federated
+   credential per subject (repeat the command, changing `--name` each time):
 
    ```bash
-   az login                          # your IE account has Contributor on the group's resource group
+   az login --tenant 5ca2bc70-353c-4d1f-b7d7-7f2b2259df68
+   az account set --subscription "Azure Simple IE Instituto de Empresa, S.L."
+   export PREFIX=sdd-<class>-g<N>    # our group prefix; the resource group is rg-<PREFIX>
+
+   # Federated credential for main branch (smoke job)
+   az identity federated-credential create \
+     -g rg-${PREFIX} \
+     --identity-name ${PREFIX}-github \
+     --name github-main-ref \
+     --issuer https://token.actions.githubusercontent.com \
+     --audiences api://AzureADTokenExchange \
+     --subject "repo:BlueSinkers/sdd-final-project:ref:refs/heads/main"
+
+   # Federated credential for production environment (deploy-services and deploy-ui jobs)
+   az identity federated-credential create \
+     -g rg-${PREFIX} \
+     --identity-name ${PREFIX}-github \
+     --name github-prod-env \
+     --issuer https://token.actions.githubusercontent.com \
+     --audiences api://AzureADTokenExchange \
+     --subject "repo:BlueSinkers/sdd-final-project:environment:production"
+   ```
+
+4. Create the Azure resources:
+
+   ```bash
    export PREFIX=sdd-<class>-g<N>    # our group prefix; the resource group is rg-<PREFIX>
    ./infra/setup.sh
    ```
 
-   The script is safe to run again. It prints the URLs and the exact values for step 4.
-4. In GitHub > Settings > Secrets and variables > Actions, add:
+   The script is safe to run again. It prints the URLs and the exact values for step 5.
+
+5. In GitHub > Settings > Secrets and variables > Actions, add:
 
    | Kind | Name | Value |
    |---|---|---|
@@ -61,17 +89,23 @@ Each service connects with its own database user, which exists only inside its o
    | Variable | `LISTINGS_APP` | `<PREFIX>-listings` |
    | Variable | `SWAPS_APP` | `<PREFIX>-swaps` |
    | Variable | `STATIC_APP` | `<PREFIX>-ui` |
-   | Secret | `AZURE_CREDENTIALS` | the JSON of our group's own service principal, sent by the professor (not the class one from Assignment 2) |
+   | Secret | `AZURE_CLIENT_ID` | Output of: `az identity show -g rg-${PREFIX} -n ${PREFIX}-github --query clientId -o tsv` |
+   | Secret | `AZURE_TENANT_ID` | `5ca2bc70-353c-4d1f-b7d7-7f2b2259df68` |
+   | Secret | `AZURE_SUBSCRIPTION_ID` | `e0b9cada-61bc-4b5a-bd7a-52c606726b3b` |
    | Secret | `AZURE_STATIC_WEB_APPS_API_TOKEN` | printed by the command the script shows |
 
-5. Run CD by hand once (Actions > CD > Run workflow) to publish the UI.
+6. Run CD by hand once (Actions > CD > Run workflow) to publish the UI.
 
-## Secrets
+## Secrets and authentication
 
 - No secret is in the repository or in an image. `.env` and `.env.azure` are git-ignored.
 - The database URL of each service is a Container App **secret**, referenced by the
   `DATABASE_URL` environment variable.
 - CI generates throwaway database passwords on every run and masks them in the log.
+- CD authenticates to Azure using **OpenID Connect (OIDC)** with a user-assigned managed
+  identity. The deploy-services and deploy-ui jobs use the `production` environment and
+  authenticate with the `environment:production` subject. The smoke job authenticates
+  with the `ref:refs/heads/main` subject.
 
 ## Rolling back
 
