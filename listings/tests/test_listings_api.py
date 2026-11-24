@@ -219,3 +219,27 @@ def test_a_crafted_path_cannot_forge_a_log_line(client, caplog):
     assert "\n" not in lines[0]
     assert lines[0].count("service=listings ") == 1
     assert " status=500 " not in lines[0]
+
+
+def test_list_is_paged_newest_first(client):
+    ids = [post(client, title=f"Item {n}").json()["id"] for n in range(5)]
+    newest_first = list(reversed(ids))
+    page = lambda **q: [item["id"] for item in client.get("/listings", params=q).json()]  # noqa: E731
+    assert page() == newest_first  # no paging asked for: everything, as before
+    assert page(limit=2) == newest_first[:2]
+    assert page(limit=2, offset=2) == newest_first[2:4]
+    assert page(limit=2, offset=4) == newest_first[4:]
+    assert page(offset=50) == []
+
+
+def test_paging_works_together_with_the_filters(client):
+    for n in range(3):
+        post(client, title=f"Book {n}", category="books")
+    post(client, title="Lamp", category="home")
+    books = client.get("/listings", params={"category": "books", "limit": 2}).json()
+    assert [item["title"] for item in books] == ["Book 2", "Book 1"]
+
+
+@pytest.mark.parametrize("params", [{"limit": 0}, {"limit": 501}, {"limit": "x"}, {"offset": -1}, {"offset": 2**31}])
+def test_paging_limits_are_422_not_an_outage(client, params):
+    assert client.get("/listings", params=params).status_code == 422

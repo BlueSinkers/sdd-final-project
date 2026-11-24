@@ -1,7 +1,7 @@
 # Architecture Decision Records
 
-Six records: architecture, stack and storage, the feature beyond CRUD, the frontend,
-deployment and pipeline, monitoring. Each lists the alternatives we considered and what the
+Seven records: architecture, stack and storage, the feature beyond CRUD, the frontend,
+deployment and pipeline, monitoring, and the changes made after an independent review. Each lists the alternatives we considered and what the
 choice costs us.
 
 ## ADR-1: Architecture: two services split by what the data is, layered inside
@@ -128,3 +128,31 @@ choice costs us.
   we say so wherever we show the number. A request that arrives while the database is still
   resuming can exceed 500 ms inside the service, and that does count. The UI is built for
   the cold start instead (ADR-4).
+
+## ADR-7: Hardening after review: what we fixed, and what we chose to leave
+- **Status:** Accepted
+- **Context:** After the first complete version we reviewed the whole stack again. It found
+  no failing behaviour, but several places where the design relied on luck: a database login
+  on every request, an "item cannot be traded twice" rule that lived only in the browser, an
+  unbounded list, no security headers, no test for the log line the monitoring depends on,
+  and action versions that anyone could move.
+- **Decision:** (1) A small connection pool in each service, with a rollback on return, a
+  ping after a few idle seconds, an age limit, and no reuse after a database error.
+  (2) Accepting a swap fails with 409 if another swap that shares an item was accepted after
+  this proposal was made, serialized by an application lock. (3) `GET /listings` takes
+  `limit` (default 200, at most 500) and `offset`. (4) A Content-Security-Policy and other
+  headers for the static UI, UI unit tests in CI, a page that refreshes itself, and a
+  "Mark as swapped" button for an accepted swap whose listings were never marked. (5) A test
+  that the log line parses with the KQL queries. (6) GitHub Actions pinned to commit SHAs.
+- **Alternatives:** (a) Have Swaps ask Listings whether an item is open: the correct answer,
+  but it breaks ADR-1, and Swaps would fail whenever Listings is cold. We use the data Swaps
+  already owns instead. (b) A cross-service transaction or an outbox to make "accept" atomic:
+  far too heavy for two tables; the repair button covers the failure we can actually hit.
+  (c) Sign-in (ADR-4 left it out of scope): the real fix for "anyone can edit any listing" and for trusting snapshots, but
+  it is a feature, not a fix, and would need a third store.
+- **Consequences:** Reuse of connections makes a stale connection possible, which the ping
+  and the age limit handle. The guard cannot see a swap that the browser accepted but never
+  recorded. The snapshots are still taken on trust (the score is only as honest as the
+  caller), and a board over 200 listings shows the newest 200 until the UI pages. We left the
+  Azure firewall rule and the lack of an approval on `production` as they are, and wrote down
+  why in [`deploy.md`](deploy.md).

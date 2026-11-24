@@ -66,6 +66,22 @@ time range with the pills at the top.
   container to start, and that wait is not in `duration_ms`. We chose this on purpose and
   wrote down why in ADR-6 ([`decisions.md`](decisions.md)).
 
+### The log line is a contract
+
+Every query parses the one log line each service writes. `listings/tests/test_log_contract.py`
+and `swaps/tests/test_log_contract.py` read the `parse` expression out of the `.kql` files
+and require the services' real log line to match it, so renaming a field on either side fails
+CI instead of silently emptying the dashboard. They prove the shape matches; they do not prove
+it in Azure, so run each query once on real logs after the first deploy.
+
+### Alerting (not set up)
+
+The dashboard shows the SLO but nothing tells anyone when it slips. After the first deploy,
+the simplest alert is a scheduled-query alert rule on `slo_swaps.kql` (Azure portal > the Log
+Analytics workspace > **Alerts** > **Create** > **Alert rule**, condition `slo_met` is false,
+evaluated hourly). It is not created by `infra/setup.sh` because we could not test that
+command without an Azure account.
+
 ### If the SLO is at risk
 
 1. Run `slowest_and_failing.kql`: is it slowness or errors, and on which endpoint?

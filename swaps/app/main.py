@@ -27,9 +27,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         with closing(db.connect_with_retry(settings.database_url)) as conn:
             db.migrate(conn)
         yield
+        app.state.pool.close()
 
     app = FastAPI(title="swaps service", version=settings.version, lifespan=lifespan)
     app.state.settings = settings
+    app.state.pool = db.ConnectionPool(settings.database_url)
     app.include_router(router)
 
     @app.exception_handler(db.DatabaseError)

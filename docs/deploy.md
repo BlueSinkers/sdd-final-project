@@ -40,20 +40,48 @@ Each service connects with its own database user, which exists only inside its o
 ## One-time setup
 
 1. Merge to `main` once so CD pushes the two images to GHCR. The deploy jobs are skipped
-   until step 4, so this run is green.
+   until step 5, so this run is green.
 2. Make both packages public (GitHub > the organisation or user > Packages > the package >
    Package settings > Change visibility). The images contain no secrets, and the Container
    Apps pull them without credentials.
-3. Create the Azure resources:
+3. Set up federated credentials for OIDC authentication. Each group has a user-assigned
+   managed identity `sdd-<class>-g<N>-github` in the resource group. Create one federated
+   credential per subject (repeat the command, changing `--name` each time):
 
    ```bash
-   az login                          # your IE account has Contributor on the group's resource group
+   az login --tenant 5ca2bc70-353c-4d1f-b7d7-7f2b2259df68
+   az account set --subscription "Azure Simple IE Instituto de Empresa, S.L."
+   export PREFIX=sdd-<class>-g<N>    # our group prefix; the resource group is rg-<PREFIX>
+
+   # Federated credential for main branch (smoke job)
+   az identity federated-credential create \
+     -g rg-${PREFIX} \
+     --identity-name ${PREFIX}-github \
+     --name github-main-ref \
+     --issuer https://token.actions.githubusercontent.com \
+     --audiences api://AzureADTokenExchange \
+     --subject "repo:BlueSinkers/sdd-final-project:ref:refs/heads/main"
+
+   # Federated credential for production environment (deploy-services and deploy-ui jobs)
+   az identity federated-credential create \
+     -g rg-${PREFIX} \
+     --identity-name ${PREFIX}-github \
+     --name github-prod-env \
+     --issuer https://token.actions.githubusercontent.com \
+     --audiences api://AzureADTokenExchange \
+     --subject "repo:BlueSinkers/sdd-final-project:environment:production"
+   ```
+
+4. Create the Azure resources:
+
+   ```bash
    export PREFIX=sdd-<class>-g<N>    # our group prefix; the resource group is rg-<PREFIX>
    ./infra/setup.sh
    ```
 
-   The script is safe to run again. It prints the URLs and the exact values for step 4.
-4. In GitHub > Settings > Secrets and variables > Actions, add:
+   The script is safe to run again. It prints the URLs and the exact values for step 5.
+
+5. In GitHub > Settings > Secrets and variables > Actions, add:
 
    | Kind | Name | Value |
    |---|---|---|
@@ -61,17 +89,23 @@ Each service connects with its own database user, which exists only inside its o
    | Variable | `LISTINGS_APP` | `<PREFIX>-listings` |
    | Variable | `SWAPS_APP` | `<PREFIX>-swaps` |
    | Variable | `STATIC_APP` | `<PREFIX>-ui` |
-   | Secret | `AZURE_CREDENTIALS` | the JSON of our group's own service principal, sent by the professor (not the class one from Assignment 2) |
+   | Secret | `AZURE_CLIENT_ID` | Output of: `az identity show -g rg-${PREFIX} -n ${PREFIX}-github --query clientId -o tsv` |
+   | Secret | `AZURE_TENANT_ID` | `5ca2bc70-353c-4d1f-b7d7-7f2b2259df68` |
+   | Secret | `AZURE_SUBSCRIPTION_ID` | `e0b9cada-61bc-4b5a-bd7a-52c606726b3b` |
    | Secret | `AZURE_STATIC_WEB_APPS_API_TOKEN` | printed by the command the script shows |
 
-5. Run CD by hand once (Actions > CD > Run workflow) to publish the UI.
+6. Run CD by hand once (Actions > CD > Run workflow) to publish the UI.
 
-## Secrets
+## Secrets and authentication
 
 - No secret is in the repository or in an image. `.env` and `.env.azure` are git-ignored.
 - The database URL of each service is a Container App **secret**, referenced by the
   `DATABASE_URL` environment variable.
 - CI generates throwaway database passwords on every run and masks them in the log.
+- CD authenticates to Azure using **OpenID Connect (OIDC)** with a user-assigned managed
+  identity. The deploy-services and deploy-ui jobs use the `production` environment and
+  authenticate with the `environment:production` subject. The smoke job authenticates
+  with the `ref:refs/heads/main` subject.
 
 ## Rolling back
 
@@ -100,6 +134,28 @@ written, so check these first:
 | Service log shows `Login failed for user` | Azure SQL can want the user as `user@server`. Set the secret to `mssql://listings_user%40<prefix>-sql:<password>@<host>:1433/<prefix>-listings-db` (`%40` is `@`) |
 | Service restarts in a loop right after an idle period | The database was still resuming while the service waited to start. Open the app URL again after a minute, or set `--min-replicas 1` for the demo |
 | CD health check times out | Run `infra/monitoring/startup_and_errors.kql` to see why the new revision did not start |
+
+## Security notes
+
+Things that are deliberately not as tight as they could be, and what to do about them:
+
+- **SQL firewall.** `infra/setup.sh` creates the rule `AllowAzureServices` (`0.0.0.0`), which
+  lets any Azure service reach the SQL server, not only our two apps. The server still needs
+  a valid user and password, and each service's user exists only inside its own database. We
+  accepted this because Container Apps on the Consumption plan have no fixed outbound
+  address we could allow instead. Tighter option: a VNet-integrated environment with a
+  private endpoint, which costs more and was out of scope.
+- **Approval before deploy.** The deploy jobs use the GitHub environment `production`, but a
+  new environment has no protection rules. To require a person to approve each deploy:
+  GitHub > Settings > Environments > `production` > **Required reviewers**. Without it, every
+  merge to `main` deploys on its own.
+- **Browser protections.** `ui/staticwebapp.config.json` sets a Content-Security-Policy and
+  other headers on the deployed UI. If the live page ever loads blank, open the browser
+  console: a CSP violation names the blocked address, and the usual fix is adding it to
+  `connect-src` in that file.
+- **Keeping pins current.** Actions are pinned to commit SHAs and `.github/dependabot.yml`
+  opens weekly update PRs for them and for the Python dependencies. The SQL Server image used
+  in CI is still `2022-latest`.
 
 ## Cold starts
 
