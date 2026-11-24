@@ -1,7 +1,8 @@
 # Sprint 1 (11-18 Nov 2026): deployed skeleton and first feature
 
-- **Product Owner:** _TBD (rotates from Sprint 0)_
-- **Scrum Master:** _TBD (rotates from Sprint 0)_
+- **Product Owner:** Abhiram Kidambi
+- **Scrum Master:** Rodrigo Martínez Casaú
+- **Developers:** Abhiram Kidambi, Serge Hagopian, Rodrigo Martínez Casaú
 - **Sprint Goal:** The skeleton deployed to Azure by the pipeline, then the first core
   feature working end to end.
 
@@ -15,11 +16,11 @@
 ## Review (in class, S30)
 
 No increment. The repository did not exist yet, so nothing was built or deployed in this
-sprint. Both items were carried over.
-
-_Add what was discussed at the Sprint 1 Review in class, if anything._
+sprint. Both items were carried over. Discussed in class that Sprint 2 must open with a
+deployed skeleton, then features on top.
 
 ## Retrospective agreements
-_Filled in by the Scrum Master. The plan written on 19 Nov records the agreements that
-followed from this sprint: scope kept tiny, small pull requests, every change reviewed, and
-a deployed "Hello World" before any feature._
+
+- Deploy a working "Hello World" to Azure before any feature work.
+- Prefer small, reviewable pull requests over one large drop.
+- Every change to `main` needs a teammate approval (branch protection).
