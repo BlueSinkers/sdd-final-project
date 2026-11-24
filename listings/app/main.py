@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app import db
+from app.accounts import router as accounts_router
 from app.config import Settings, load_settings
 from app.routes import router
 
@@ -33,6 +34,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.pool = db.ConnectionPool(settings.database_url)
     app.include_router(router)
+    app.include_router(accounts_router)
 
     @app.exception_handler(db.DatabaseError)
     async def database_unavailable(request: Request, error: Exception):
@@ -78,7 +80,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         CORSMiddleware,
         allow_origins=list(settings.cors_origins),
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-        allow_headers=["Content-Type"],
+        allow_headers=["Content-Type", "Authorization"],
     )
 
     @app.get("/health")

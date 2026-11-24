@@ -4,6 +4,7 @@
 import { ApiError, RETRY_MS, listingsApi, swapsApi } from "./api.js";
 import { CONDITION_LABELS, clear, el, formatDate, formatEuros, setPill, toast } from "./dom.js";
 import { addCardAction, getListings, listingsLoaded, loadListings, onListingsChange, renderListings } from "./listings.js";
+import { currentUser, isMe, openSignIn } from "./session.js";
 import { listingsToFinish } from "./swapstate.js";
 
 const VERDICT_CLASS = { "Fair trade": "verdict-fair", Lopsided: "verdict-lopsided", "Very uneven": "verdict-uneven" };
@@ -98,11 +99,16 @@ function blockedReason(swap) {
 
 function row(swap) {
   const actions = el("div", { class: "swap-actions" });
+  // The owner of the requested item answers; the proposer can only withdraw.
+  const mine = isMe(swap.requested.owner_name);
+  const myProposal = isMe(swap.proposer_name);
   if (swap.status === "proposed") {
     const busy = state.deciding.has(swap.id);
     const blocked = blockedReason(swap);
     const names = `${swap.offered.title} for ${swap.requested.title}`;
-    if (blocked) {
+    if (!mine) {
+      actions.append(el("span", { class: "swap-blocked", text: `Waiting for ${swap.requested.owner_name} to answer.` }));
+    } else if (blocked) {
       actions.append(el("span", { class: "swap-blocked", text: `Cannot be accepted: ${blocked}` }));
     } else {
       actions.append(
@@ -116,18 +122,20 @@ function row(swap) {
         }),
       );
     }
-    actions.append(
-      el("button", {
-        class: "btn btn-small",
-        type: "button",
-        text: "Decline",
-        "aria-label": `Decline swap: ${names}`,
-        disabled: busy,
-        onclick: () => decide(swap, "declined"),
-      }),
-    );
+    if (mine || myProposal) {
+      actions.append(
+        el("button", {
+          class: "btn btn-small",
+          type: "button",
+          text: mine ? "Decline" : "Withdraw",
+          "aria-label": `${mine ? "Decline" : "Withdraw"} swap: ${names}`,
+          disabled: busy,
+          onclick: () => decide(swap, "declined"),
+        }),
+      );
+    }
   }
-  if (swap.status === "accepted" && listingsLoaded()) {
+  if (swap.status === "accepted" && listingsLoaded() && (mine || myProposal)) {
     const unfinished = listingsToFinish(swap, getListings());
     if (unfinished.length > 0) {
       const busy = state.deciding.has(swap.id);
@@ -159,6 +167,8 @@ function row(swap) {
     actions,
   );
 }
+
+export const renderSwaps = () => render();
 
 function render() {
   clear(message);
@@ -245,7 +255,17 @@ const snapshot = (listing) => ({
 });
 
 function openDialog(requested) {
-  const offers = getListings().filter((listing) => listing.status === "open" && listing.id !== requested.id);
+  // Proposing needs an account; come back here once signed in.
+  if (!currentUser()) {
+    openSignIn(() => {
+      if (!isMe(requested.owner_name)) openDialog(requested);
+    });
+    return;
+  }
+  // You offer one of your own open listings.
+  const offers = getListings().filter(
+    (listing) => listing.status === "open" && listing.id !== requested.id && isMe(listing.owner_name),
+  );
   state.requested = requested;
   form.reset();
   form.hidden = false;
@@ -265,15 +285,8 @@ function openDialog(requested) {
   }
   const none = offers.length === 0;
   document.getElementById("swap-submit").disabled = none;
-  if (none) formError.textContent = "There is no other open listing to offer. Post one of your own first.";
-  else syncProposer();
+  if (none) formError.textContent = "You have no open listing to offer. Post one of your own first.";
   dialog.showModal();
-}
-
-// The person proposing is normally the owner of the item being offered.
-function syncProposer() {
-  const offered = getListings().find((listing) => String(listing.id) === form.elements.offered.value);
-  if (offered) form.elements.proposer_name.value = offered.owner_name;
 }
 
 function showResult(swap) {
@@ -303,7 +316,6 @@ async function submit(event) {
   formError.textContent = "";
   try {
     const swap = await swapsApi.propose({
-      proposer_name: form.elements.proposer_name.value,
       message: form.elements.message.value,
       offered: snapshot(offered),
       requested: snapshot(state.requested),
@@ -324,7 +336,8 @@ async function submit(event) {
 
 export function initSwaps() {
   addCardAction((listing) => {
-    if (listing.status !== "open") return null;
+    // Not on swapped items, and not on your own: you ask for someone else's.
+    if (listing.status !== "open" || isMe(listing.owner_name)) return null;
     const up = available();
     return el("button", {
       class: "btn btn-quiet btn-propose",
@@ -335,7 +348,6 @@ export function initSwaps() {
       onclick: () => openDialog(listing),
     });
   });
-  form.elements.offered.addEventListener("change", syncProposer);
   form.addEventListener("submit", submit);
   document.getElementById("swap-cancel").addEventListener("click", () => dialog.close());
   // Whether a proposal can still be accepted depends on the listings' status.

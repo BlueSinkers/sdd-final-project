@@ -64,7 +64,8 @@ class ListingSnapshot(BaseModel):
 class SwapIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    proposer_name: Name
+    # Set by the service from the signed-in account; anything sent here is replaced.
+    proposer_name: Name | None = None
     message: Message = ""
     offered: ListingSnapshot
     requested: ListingSnapshot

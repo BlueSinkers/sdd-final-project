@@ -5,6 +5,12 @@ with its own database user, which exists only in its own database.
 
 ```mermaid
 erDiagram
+    USERS {
+        int id PK
+        nvarchar username "2-40 characters, unique ignoring case"
+        nvarchar password_hash "salted scrypt, never the password"
+        datetime2 created_at "UTC"
+    }
     LISTINGS {
         int id PK
         nvarchar title "1-80 characters"
@@ -12,7 +18,7 @@ erDiagram
         nvarchar category "clothing, books, electronics, home, sports, other"
         tinyint condition "1 (heavily used) to 5 (like new)"
         decimal estimated_value "euros, above 0"
-        nvarchar owner_name "1-40 characters"
+        nvarchar owner_name "the username of the account that posted it"
         nvarchar status "open or swapped"
         datetime2 created_at "UTC"
         datetime2 updated_at "UTC"

@@ -7,7 +7,7 @@ from app import db
 
 def test_migrations_are_recorded_and_not_applied_twice(conn):
     recorded = [row["version"] for row in conn.execute("SELECT version FROM schema_migrations ORDER BY version")]
-    assert recorded == ["001_create_listings.sql", "002_seed_demo_listings.sql"]
+    assert recorded == ["001_create_listings.sql", "002_seed_demo_listings.sql", "003_create_users.sql"]
     assert db.migrate(conn) == []
 
 

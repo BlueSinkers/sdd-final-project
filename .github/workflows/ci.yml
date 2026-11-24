@@ -134,6 +134,9 @@ jobs:
             echo "::add-mask::$value"
             echo "$name=$value" >> .env
           done
+          secret="$(openssl rand -hex 32)"
+          echo "::add-mask::$secret"
+          echo "AUTH_SECRET=$secret" >> .env
       - run: docker compose up -d --build
       - name: Both services and the UI answer
         run: |

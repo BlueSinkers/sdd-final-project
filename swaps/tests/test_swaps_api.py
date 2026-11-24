@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from fastapi.testclient import TestClient
+from tests.conftest import as_user
 
 from app import db, repository
 from app.config import Settings
@@ -14,10 +15,13 @@ JACKET = {"listing_id": 1, "title": "Denim jacket", "owner_name": "Lucia", "cond
 LAMP = {"listing_id": 3, "title": "Desk lamp", "owner_name": "Chen", "condition": 5, "estimated_value": 18}
 BOOK = {"listing_id": 2, "title": "Calculus", "owner_name": "Omar", "condition": 3, "estimated_value": 40}
 
+CHEN = as_user("Chen")  # owns the lamp, so answers the default proposal
+
 
 def propose(client, offered=JACKET, requested=LAMP, **changes):
-    body = {"proposer_name": "Lucia", "offered": offered, "requested": requested, **changes}
-    return client.post("/swaps", json=body)
+    """Propose as the owner of the offered item, which is the only person who may."""
+    body = {"offered": offered, "requested": requested, **changes}
+    return client.post("/swaps", json=body, headers=as_user((offered or {}).get("owner_name") or "Lucia"))
 
 
 def test_post_scores_and_stores_the_proposal(client):
@@ -126,17 +130,17 @@ def test_list_filters_by_listing_on_either_side(client):
 
 def test_a_proposed_swap_can_be_accepted_once(client):
     swap = propose(client).json()
-    accepted = client.patch(f"/swaps/{swap['id']}/status", json={"status": "accepted"})
+    accepted = client.patch(f"/swaps/{swap['id']}/status", json={"status": "accepted"}, headers=CHEN)
     assert accepted.status_code == 200
     assert accepted.json()["status"] == "accepted"
-    again = client.patch(f"/swaps/{swap['id']}/status", json={"status": "declined"})
+    again = client.patch(f"/swaps/{swap['id']}/status", json={"status": "declined"}, headers=CHEN)
     assert again.status_code == 409
     assert client.get(f"/swaps/{swap['id']}").json()["status"] == "accepted"
 
 
 def test_a_proposed_swap_can_be_declined(client):
     swap = propose(client).json()
-    declined = client.patch(f"/swaps/{swap['id']}/status", json={"status": "declined"})
+    declined = client.patch(f"/swaps/{swap['id']}/status", json={"status": "declined"}, headers=CHEN)
     assert declined.json()["status"] == "declined"
     # Deciding does not change the stored score.
     assert declined.json()["fairness_score"] == swap["fairness_score"]
@@ -239,7 +243,10 @@ ATLAS = {"listing_id": 9, "title": "Atlas", "owner_name": "Mia", "condition": 3,
 
 
 def decide(client, swap, status):
-    return client.patch(f"/swaps/{swap['id']}/status", json={"status": status})
+    """Answer as the owner of the requested item, which is the person who decides."""
+    return client.patch(
+        f"/swaps/{swap['id']}/status", json={"status": status}, headers=as_user(swap["requested"]["owner_name"])
+    )
 
 
 def test_two_swaps_sharing_an_item_cannot_both_be_accepted(client):
@@ -314,3 +321,82 @@ def _forget_accepted(client):
             conn.execute("DELETE FROM swaps")
     finally:
         conn.close()
+
+
+# --- who may do what -----------------------------------------------------------------
+
+
+def test_proposing_needs_a_login(client):
+    body = {"offered": JACKET, "requested": LAMP}
+    assert client.post("/swaps", json=body, headers={"Authorization": ""}).status_code == 401
+    assert client.post("/swaps", json=body, headers={"Authorization": "Bearer not-a-token"}).status_code == 401
+    assert client.get("/swaps").json() == []
+
+
+def test_reading_swaps_needs_no_login(client):
+    propose(client)
+    assert len(client.get("/swaps", headers={"Authorization": ""}).json()) == 1
+
+
+def test_you_can_only_offer_your_own_listing(client):
+    body = {"offered": JACKET, "requested": LAMP}
+    response = client.post("/swaps", json=body, headers=as_user("Omar"))  # the jacket is Lucia's
+    assert response.status_code == 403
+    assert response.json()["detail"] == "You can only offer one of your own listings."
+
+
+def test_you_cannot_ask_for_your_own_listing(client):
+    mine = {**LAMP, "owner_name": "Lucia"}
+    assert client.post("/swaps", json={"offered": JACKET, "requested": mine}).status_code == 403
+
+
+def test_the_proposer_is_the_signed_in_account_whatever_the_body_says(client):
+    swap = propose(client, proposer_name="Somebody else").json()
+    assert swap["proposer_name"] == "Lucia"
+
+
+def test_usernames_match_ignoring_case(client):
+    body = {"offered": JACKET, "requested": LAMP}
+    swap = client.post("/swaps", json=body, headers=as_user("lucia"))
+    assert swap.status_code == 201
+    assert decide_as(client, swap.json(), "accepted", "CHEN").status_code == 200
+
+
+def decide_as(client, swap, status, username):
+    return client.patch(f"/swaps/{swap['id']}/status", json={"status": status}, headers=as_user(username))
+
+
+def test_only_the_owner_of_the_requested_item_can_accept(client):
+    swap = propose(client).json()  # Lucia asks for Chen's lamp
+    assert decide_as(client, swap, "accepted", "Lucia").status_code == 403  # not her own proposal
+    assert decide_as(client, swap, "accepted", "Omar").status_code == 403
+    assert (
+        client.patch(
+            f"/swaps/{swap['id']}/status", json={"status": "accepted"}, headers={"Authorization": ""}
+        ).status_code
+        == 401
+    )
+    assert client.get(f"/swaps/{swap['id']}").json()["status"] == "proposed"
+    assert decide_as(client, swap, "accepted", "Chen").status_code == 200
+
+
+def test_the_proposer_can_withdraw_but_a_stranger_cannot_decline(client):
+    swap = propose(client).json()
+    assert decide_as(client, swap, "declined", "Omar").status_code == 403
+    assert decide_as(client, swap, "declined", "Lucia").status_code == 200
+
+
+def test_an_expired_token_is_refused(client):
+    from tests.conftest import TEST_SECRET
+
+    from app.tokens import make_token
+
+    old = {"Authorization": f"Bearer {make_token(TEST_SECRET, 'Lucia', lifetime=-1)}"}
+    assert client.post("/swaps", json={"offered": JACKET, "requested": LAMP}, headers=old).status_code == 401
+
+
+def test_a_token_signed_with_another_secret_is_refused(client):
+    from app.tokens import make_token
+
+    forged = {"Authorization": f"Bearer {make_token('x' * 40, 'Lucia')}"}
+    assert client.post("/swaps", json={"offered": JACKET, "requested": LAMP}, headers=forged).status_code == 401

@@ -8,6 +8,7 @@ from app import repository
 from app.db import Connection, get_conn
 from app.models import MAX_ID, Category, Listing, ListingIn, Status, StatusIn
 from app.repository import DEFAULT_LIMIT, MAX_LIMIT
+from app.tokens import current_user, same_person
 
 router = APIRouter(prefix="/listings", tags=["listings"])
 
@@ -34,9 +35,18 @@ def list_listings(
     return repository.list_listings(conn, status, category, limit, offset)
 
 
+def owned(listing: Listing | None, username: str) -> Listing:
+    """The listing, if it exists and belongs to the signed-in account."""
+    listing = found(listing)
+    if not same_person(listing.owner_name, username):
+        raise HTTPException(status_code=403, detail="Only the person who posted this listing can change it.")
+    return listing
+
+
 @router.post("", response_model=Listing, status_code=201)
-def create_listing(data: ListingIn, conn: Connection = Depends(get_conn)):
-    return repository.create_listing(conn, data)
+def create_listing(data: ListingIn, conn: Connection = Depends(get_conn), username: str = Depends(current_user)):
+    """Post a listing. It belongs to the signed-in account."""
+    return repository.create_listing(conn, data.model_copy(update={"owner_name": username}))
 
 
 @router.get("/{listing_id}", response_model=Listing)
@@ -45,18 +55,34 @@ def get_listing(listing_id: ListingId, conn: Connection = Depends(get_conn)):
 
 
 @router.put("/{listing_id}", response_model=Listing)
-def update_listing(listing_id: ListingId, data: ListingIn, conn: Connection = Depends(get_conn)):
-    return found(repository.update_listing(conn, listing_id, data))
+def update_listing(
+    listing_id: ListingId,
+    data: ListingIn,
+    conn: Connection = Depends(get_conn),
+    username: str = Depends(current_user),
+):
+    owner = owned(repository.get_listing(conn, listing_id), username).owner_name
+    return found(repository.update_listing(conn, listing_id, data.model_copy(update={"owner_name": owner})))
 
 
 @router.patch("/{listing_id}/status", response_model=Listing)
-def set_status(listing_id: ListingId, data: StatusIn, conn: Connection = Depends(get_conn)):
-    """Mark a listing swapped once the trade happened, or open it again."""
+def set_status(
+    listing_id: ListingId,
+    data: StatusIn,
+    conn: Connection = Depends(get_conn),
+    username: str = Depends(current_user),
+):
+    """Mark a listing swapped once the trade happened, or open it again.
+
+    Any signed-in account may do this, not only the owner: when a swap is accepted the
+    page marks both items, and the other item belongs to the other person. The services
+    never call each other, so Listings cannot check the swap itself."""
     return found(repository.set_status(conn, listing_id, data.status))
 
 
 @router.delete("/{listing_id}", status_code=204)
-def delete_listing(listing_id: ListingId, conn: Connection = Depends(get_conn)):
+def delete_listing(listing_id: ListingId, conn: Connection = Depends(get_conn), username: str = Depends(current_user)):
+    owned(repository.get_listing(conn, listing_id), username)
     if not repository.delete_listing(conn, listing_id):
         raise HTTPException(status_code=404, detail="Listing not found.")
     return Response(status_code=204)

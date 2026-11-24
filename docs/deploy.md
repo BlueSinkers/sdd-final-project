@@ -101,7 +101,12 @@ Each service connects with its own database user, which exists only inside its o
 - No secret is in the repository or in an image. `.env` and `.env.azure` are git-ignored.
 - The database URL of each service is a Container App **secret**, referenced by the
   `DATABASE_URL` environment variable.
-- CI generates throwaway database passwords on every run and masks them in the log.
+- `AUTH_SECRET` signs the sign-in tokens. `infra/setup.sh` generates it, keeps it in
+  `.env.azure`, and gives the same value to both Container Apps as the secret `auth-secret`.
+  A service refuses to start without it. Changing it logs everybody out.
+- `DEMO_LOGIN` (default `true` in the script) switches the password-free demo accounts on.
+  Run `DEMO_LOGIN=false ./infra/setup.sh` to turn them off.
+- CI generates throwaway database passwords and a throwaway `AUTH_SECRET` on every run and masks them in the log.
 - CD authenticates to Azure using **OpenID Connect (OIDC)** with a user-assigned managed
   identity. The deploy-services and deploy-ui jobs use the `production` environment and
   authenticate with the `environment:production` subject. The smoke job authenticates
@@ -134,6 +139,12 @@ written, so check these first:
 | Service log shows `Login failed for user` | Azure SQL can want the user as `user@server`. Set the secret to `mssql://listings_user%40<prefix>-sql:<password>@<host>:1433/<prefix>-listings-db` (`%40` is `@`) |
 | Service restarts in a loop right after an idle period | The database was still resuming while the service waited to start. Open the app URL again after a minute, or set `--min-replicas 1` for the demo |
 | CD health check times out | Run `infra/monitoring/startup_and_errors.kql` to see why the new revision did not start |
+
+## Adding sign-in to apps that already exist
+
+Apps created before sign-in existed have no `AUTH_SECRET`, and the new image will not start
+without it. Run `./infra/setup.sh` again (it is safe to re-run): it adds the secret and the
+two settings to both apps. Then re-run the CD workflow.
 
 ## Security notes
 

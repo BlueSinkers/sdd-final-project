@@ -65,12 +65,18 @@ fi
 SQL_ADMIN_PASSWORD="${SQL_ADMIN_PASSWORD:-$(new_password)}"
 LISTINGS_DB_PASSWORD="${LISTINGS_DB_PASSWORD:-$(new_password)}"
 SWAPS_DB_PASSWORD="${SWAPS_DB_PASSWORD:-$(new_password)}"
+# Signs the sign-in tokens. Both apps get the same value, so Swaps can check a token
+# that Listings issued without calling it.
+AUTH_SECRET="${AUTH_SECRET:-$(openssl rand -hex 32)}"
+# One-click demo accounts with no password. Run with DEMO_LOGIN=false to turn them off.
+DEMO_LOGIN="${DEMO_LOGIN:-true}"
 umask 077
 cat > "$SECRETS_FILE" <<SECRETS
 # Written by infra/setup.sh. Git-ignored. Do not commit or share.
 SQL_ADMIN_PASSWORD=$SQL_ADMIN_PASSWORD
 LISTINGS_DB_PASSWORD=$LISTINGS_DB_PASSWORD
 SWAPS_DB_PASSWORD=$SWAPS_DB_PASSWORD
+AUTH_SECRET=$AUTH_SECRET
 SECRETS
 
 say "Checking the resource group"
@@ -167,17 +173,19 @@ create_app() { # app name, service, database, user, password
   local database_url="mssql://$4:$5@${SQL_HOST}:1433/$3"
   if az containerapp show --resource-group "$RESOURCE_GROUP" --name "$1" --output none 2>/dev/null; then
     az containerapp secret set --resource-group "$RESOURCE_GROUP" --name "$1" \
-      --secrets "database-url=$database_url" --output none
+      --secrets "database-url=$database_url" "auth-secret=$AUTH_SECRET" --output none
     az containerapp update --resource-group "$RESOURCE_GROUP" --name "$1" \
-      --set-env-vars "DATABASE_URL=secretref:database-url" "CORS_ORIGINS=https://${UI_HOST}" --output none
+      --set-env-vars "DATABASE_URL=secretref:database-url" "AUTH_SECRET=secretref:auth-secret" \
+      "DEMO_LOGIN=$DEMO_LOGIN" "CORS_ORIGINS=https://${UI_HOST}" --output none
   else
     # Only the browser origin of our own UI may call the API. The database URL
     # is a Container App secret, never a plain environment variable.
     az containerapp create --resource-group "$RESOURCE_GROUP" --name "$1" --environment "$ENVIRONMENT" \
       --image "${GHCR_REPO}-$2:${IMAGE_TAG}" --ingress external --target-port 8000 \
       --min-replicas 0 --max-replicas 1 --cpu 0.25 --memory 0.5Gi \
-      --secrets "database-url=$database_url" \
-      --env-vars "DATABASE_URL=secretref:database-url" "CORS_ORIGINS=https://${UI_HOST}" --output none
+      --secrets "database-url=$database_url" "auth-secret=$AUTH_SECRET" \
+      --env-vars "DATABASE_URL=secretref:database-url" "AUTH_SECRET=secretref:auth-secret" \
+      "DEMO_LOGIN=$DEMO_LOGIN" "CORS_ORIGINS=https://${UI_HOST}" --output none
   fi
 }
 create_app "$LISTINGS_APP" listings "$LISTINGS_DB" listings_user "$LISTINGS_DB_PASSWORD"
@@ -213,5 +221,5 @@ the CD workflow once so it publishes the UI:
     AZURE_STATIC_WEB_APPS_API_TOKEN = the output of:
       az staticwebapp secrets list --resource-group $RESOURCE_GROUP --name $STATIC_APP --query properties.apiKey --output tsv
 
-The database passwords are in .env.azure (git-ignored). Keep that file private.
+The database passwords and the sign-in secret are in .env.azure (git-ignored). Keep that file private.
 DONE
