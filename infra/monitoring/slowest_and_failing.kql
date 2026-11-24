@@ -1,0 +1,10 @@
+// Where to look first: per endpoint, how many requests, how many failed, how slow.
+ContainerAppConsoleLogs_CL
+| where Log_s startswith "service="
+| parse Log_s with "service=" service " method=" method " path=" path " status=" status:int " duration_ms=" duration_ms:real
+| where isnotnull(status) and path != "/health"
+// /listings/17 and /listings/42 are the same endpoint.
+| extend endpoint = strcat(method, " ", replace_regex(path, @"/\d+", "/{id}"))
+| summarize requests = count(), errors_5xx = countif(status >= 500), rejected_4xx = countif(status between (400 .. 499)),
+    p95_ms = round(percentile(duration_ms, 95), 1), max_ms = round(max(duration_ms), 1) by service, endpoint
+| order by errors_5xx desc, p95_ms desc
