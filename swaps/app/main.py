@@ -1,8 +1,10 @@
 """Swaps service: application factory, request logging, health check."""
 
 import logging
+import sys
 import time
 from contextlib import asynccontextmanager, closing
+from urllib.parse import quote
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,7 +14,7 @@ from app import db
 from app.config import Settings, load_settings
 from app.routes import router
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
+logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
 log = logging.getLogger("swaps")
 
 
@@ -36,10 +38,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         log.error("database error on %s %s: %s", request.method, request.url.path, error)
         return JSONResponse(status_code=503, content={"detail": "The swaps database is unavailable."})
 
-    @app.exception_handler(Exception)
-    async def unexpected_error(request: Request, error: Exception):
-        log.exception("unexpected error on %s %s", request.method, request.url.path)
-        return JSONResponse(status_code=500, content={"detail": "Something went wrong on our side."})
+    @app.exception_handler(db.IntegrityError)
+    async def rejected_by_database(request: Request, error: Exception):
+        # A value got past the API's validation but broke a database constraint.
+        # That is a bad request, not an outage, so it must not look like one.
+        log.error("constraint violation on %s %s: %s", request.method, request.url.path, error)
+        return JSONResponse(status_code=422, content={"detail": "Those values were not accepted."})
 
     @app.middleware("http")
     async def log_requests(request: Request, call_next):
@@ -49,17 +53,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             response = await call_next(request)
             status = response.status_code
             return response
+        except Exception:
+            # Answered here, inside the CORS layer, so the browser can read the
+            # response. The stack trace goes to the log, never to the caller.
+            log.exception("unexpected error on %s %s", request.method, request.url.path)
+            return JSONResponse(status_code=500, content={"detail": "Something went wrong on our side."})
         finally:
             ms = (time.perf_counter() - start) * 1000
+            # The path is percent-encoded again so a crafted URL with a line break
+            # or spaces in it cannot write a fake request line into the log.
             log.info(
                 "service=swaps method=%s path=%s status=%s duration_ms=%.1f",
                 request.method,
-                request.url.path,
+                quote(request.url.path, safe="/-._~"),
                 status,
                 ms,
             )
 
-    # Added last so it is the outermost layer: error responses carry CORS headers too.
+    # Added last so it is the outermost layer: every response, errors included, carries
+    # CORS headers. It also answers preflight (OPTIONS) requests itself.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(settings.cors_origins),

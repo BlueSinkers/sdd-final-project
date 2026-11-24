@@ -173,3 +173,56 @@ def test_unexpected_error_is_a_500_without_a_stack_trace(database_url, conn, mon
     assert response.status_code == 500
     assert response.json() == {"detail": "Something went wrong on our side."}
     assert "boom" not in response.text
+
+
+def test_score_is_cut_not_rounded_through_the_api(client):
+    # Both condition 5, so adjusted = estimated. 7999.60 / 10000 = 0.79996.
+    almost = {**LAMP, "estimated_value": 7999.60}
+    full = {**JACKET, "condition": 5, "estimated_value": 10000}
+    body = propose(client, almost, full).json()
+    assert body["fairness_score"] == 0.7999
+    assert body["verdict"] == "Lopsided"
+
+
+def test_values_are_rounded_to_cents_before_scoring(client):
+    assert propose(client, requested={**LAMP, "estimated_value": 0.004}).status_code == 422
+    body = propose(client, requested={**LAMP, "estimated_value": 17.999}).json()
+    assert body["requested"]["estimated_value"] == 18.0
+    assert body["requested"]["adjusted_value"] == 18.0
+
+
+def test_ids_too_large_for_the_database_are_422_not_an_outage(client):
+    too_large = 2_147_483_648
+    assert propose(client, requested={**LAMP, "listing_id": too_large}).status_code == 422
+    assert client.get(f"/swaps/{too_large}").status_code == 422
+    assert client.get("/swaps", params={"listing_id": too_large}).status_code == 422
+    assert client.patch(f"/swaps/{too_large}/status", json={"status": "accepted"}).status_code == 422
+
+
+def test_text_is_measured_the_way_the_database_stores_it(client):
+    assert propose(client, offered={**JACKET, "title": "🧥" * 40}).status_code == 201
+    assert propose(client, offered={**JACKET, "title": "🧥" * 41}).status_code == 422
+    assert propose(client, message="🙂" * 151).status_code == 422
+
+
+def test_a_constraint_violation_is_422_not_an_outage(client, monkeypatch):
+    def violate(*args, **kwargs):
+        raise db.IntegrityError("The INSERT statement conflicted with the CHECK constraint ck_swaps_values")
+
+    monkeypatch.setattr(repository, "create_swap", violate)
+    response = propose(client)
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Those values were not accepted."}
+    assert "ck_swaps_values" not in response.text
+
+
+def test_a_500_still_carries_cors_headers(database_url, conn, monkeypatch):
+    def explode(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(repository, "list_swaps", explode)
+    app = create_app(Settings(database_url=database_url, cors_origins=("http://localhost:8080",)))
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.get("/swaps", headers={"Origin": "http://localhost:8080"})
+    assert response.status_code == 500
+    assert response.headers["access-control-allow-origin"] == "http://localhost:8080"

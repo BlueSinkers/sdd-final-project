@@ -1,0 +1,7 @@
+// Everything that is not a request line: startup, migrations, database retries, errors.
+// Useful after a deploy and when /health fails.
+ContainerAppConsoleLogs_CL
+| where Log_s !startswith "service="
+| project TimeGenerated, app = ContainerAppName_s, revision = RevisionName_s, Log_s
+| order by TimeGenerated desc
+| take 200
