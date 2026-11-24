@@ -206,8 +206,10 @@ the CD workflow once so it publishes the UI:
     STATIC_APP           = $STATIC_APP
 
   Secrets
-    AZURE_CREDENTIALS               = the JSON of our group's own service principal (sent by the
-                                      professor; not the class one from Assignment 2)
+    AZURE_CLIENT_ID                 = the output of:
+      az identity show -g $RESOURCE_GROUP -n ${PREFIX}-github --query clientId -o tsv
+    AZURE_TENANT_ID                 = 5ca2bc70-353c-4d1f-b7d7-7f2b2259df68
+    AZURE_SUBSCRIPTION_ID           = e0b9cada-61bc-4b5a-bd7a-52c606726b3b
     AZURE_STATIC_WEB_APPS_API_TOKEN = the output of:
       az staticwebapp secrets list --resource-group $RESOURCE_GROUP --name $STATIC_APP --query properties.apiKey --output tsv
 
