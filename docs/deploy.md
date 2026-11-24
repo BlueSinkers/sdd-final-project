@@ -17,10 +17,26 @@
 
 Nobody deploys from a laptop. CI never touches Azure.
 
+## Our deployment
+
+| | |
+|---|---|
+| Prefix | `sdd-3b-g1` |
+| Resource group | `rg-sdd-3b-g1` (West Europe) |
+| UI | https://kind-forest-0330c0b03.8.azurestaticapps.net |
+| Listings | https://sdd-3b-g1-listings.blackmoss-282db355.westeurope.azurecontainerapps.io |
+| Swaps | https://sdd-3b-g1-swaps.blackmoss-282db355.westeurope.azurecontainerapps.io |
+| Deployed commit (at first go-live) | `dfe9083057083fe5e7b7c058755496f10042d2cd` |
+
+Auth for CD is OIDC against the managed identity `sdd-3b-g1-github` (not a service principal).
+GHCR packages `sdd-final-project-listings` and `sdd-final-project-swaps` are public so
+Container Apps can pull without credentials.
+
 ## What runs where
 
 Everything is in our group's resource group `rg-sdd-<class>-g<N>` and every name starts with
-our group prefix `sdd-<class>-g<N>` (shown as `<prefix>` below).
+our group prefix `sdd-<class>-g<N>` (shown as `<prefix>` below). For this group that is
+`rg-sdd-3b-g1` / `sdd-3b-g1`.
 
 | Piece | Azure resource | Name | Notes |
 |---|---|---|---|
