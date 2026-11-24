@@ -7,7 +7,20 @@ COLUMNS = "id, title, description, category, condition, estimated_value, owner_n
 INSERTED = ", ".join(f"INSERTED.{column}" for column in COLUMNS.split(", "))
 
 
-def list_listings(conn: Connection, status: Status | None = None, category: Category | None = None) -> list[Listing]:
+# The page size when the caller gives none, and the most a caller may ask for. The board has
+# a handful of listings, so the default returns all of them; the cap keeps one request from
+# pulling the whole table.
+DEFAULT_LIMIT = 200
+MAX_LIMIT = 500
+
+
+def list_listings(
+    conn: Connection,
+    status: Status | None = None,
+    category: Category | None = None,
+    limit: int = DEFAULT_LIMIT,
+    offset: int = 0,
+) -> list[Listing]:
     where, params = [], []
     if status is not None:
         where.append("status = %s")
@@ -18,7 +31,8 @@ def list_listings(conn: Connection, status: Status | None = None, category: Cate
     sql = f"SELECT {COLUMNS} FROM listings"
     if where:
         sql += " WHERE " + " AND ".join(where)
-    sql += " ORDER BY created_at DESC, id DESC"
+    sql += " ORDER BY created_at DESC, id DESC OFFSET %s ROWS FETCH NEXT %s ROWS ONLY"
+    params += [offset, limit]
     return [Listing.from_row(row) for row in conn.execute(sql, params)]
 
 
