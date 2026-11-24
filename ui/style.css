@@ -1,20 +1,20 @@
 :root {
-  --bg: #f6f4ef;
-  --surface: #ffffff;
-  --ink: #1f2a26;
-  --muted: #5d6b65;
-  --line: #ded9cd;
-  --brand: #1f6f54;
-  --brand-dark: #17543f;
-  --brand-soft: #e3f1eb;
-  --fair: #1f6f54;
-  --fair-soft: #e3f1eb;
-  --lopsided: #8a5a00;
-  --lopsided-soft: #fdf0d2;
-  --uneven: #a3271f;
-  --uneven-soft: #fbe4e1;
-  --radius: 12px;
-  --shadow: 0 1px 2px rgb(31 42 38 / 8%), 0 4px 14px rgb(31 42 38 / 6%);
+  --bg: #111111;
+  --surface: rgba(255, 255, 255, 0.04);
+  --ink: #d2d5dd;
+  --muted: #7a7f89;
+  --line: rgba(210, 213, 221, 0.14);
+  --brand: #d2d5dd;
+  --brand-dark: #aeb8cc;
+  --brand-soft: rgba(210, 213, 221, 0.08);
+  --fair: #8ee0b8;
+  --fair-soft: rgba(98, 212, 154, 0.16);
+  --lopsided: #f0c96a;
+  --lopsided-soft: rgba(232, 181, 60, 0.16);
+  --uneven: #ffb0b0;
+  --uneven-soft: rgba(255, 143, 143, 0.16);
+  --radius: 14px;
+  --shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
 }
 
 * {
@@ -23,9 +23,28 @@
 
 body {
   margin: 0;
-  background: var(--bg);
+  background: #0a0a0a;
   color: var(--ink);
-  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 16px/1.5 "Helvetica Neue", Helvetica, Arial, sans-serif;
+  min-height: 100vh;
+}
+
+.sky {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  display: block;
+}
+
+.site-header,
+main,
+.toast,
+dialog {
+  position: relative;
+  z-index: 1;
 }
 
 .wrap {
@@ -43,9 +62,29 @@ h3 {
 
 /* Header */
 .site-header {
-  background: var(--brand);
-  color: #fff;
-  padding: 22px 0;
+  background: transparent;
+  color: var(--ink);
+  padding: 28px 0 8px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand-mark {
+  width: 48px;
+  height: 48px;
+  flex: none;
+}
+
+.brand-name {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .header-row {
@@ -78,7 +117,8 @@ h3 {
   gap: 6px;
   padding: 4px 12px;
   border-radius: 999px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
   color: var(--ink);
   font-size: 0.85rem;
   font-weight: 600;
@@ -171,7 +211,7 @@ section + section {
 .btn-primary {
   background: var(--brand);
   border-color: var(--brand);
-  color: #fff;
+  color: #111111;
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -222,8 +262,13 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 8px 10px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.04);
   max-width: 100%;
+}
+
+option {
+  background: #161616;
+  color: #d2d5dd;
 }
 
 /* Listing cards */
@@ -278,7 +323,7 @@ textarea {
 }
 
 .chip-swapped {
-  background: #ece9e1;
+  background: rgba(255, 255, 255, 0.06);
   color: var(--muted);
 }
 
@@ -510,28 +555,29 @@ dialog form[hidden] {
 
 .notice-error {
   background: var(--uneven-soft);
-  border-color: #efb9b3;
-  color: #6f1a14;
+  border-color: rgba(255, 143, 143, 0.35);
+  color: var(--uneven);
 }
 
 .notice-warning {
   background: var(--lopsided-soft);
-  border-color: #ecd08f;
-  color: #5c3c00;
+  border-color: rgba(232, 181, 60, 0.35);
+  color: var(--lopsided);
 }
 
 /* Dialogs */
 dialog {
-  border: none;
+  border: 1px solid var(--line);
   border-radius: var(--radius);
-  box-shadow: 0 20px 60px rgb(0 0 0 / 30%);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
   padding: 24px;
   width: min(520px, calc(100vw - 32px));
   color: var(--ink);
+  background: #161616;
 }
 
 dialog::backdrop {
-  background: rgb(31 42 38 / 45%);
+  background: rgba(10, 10, 10, 0.72);
 }
 
 dialog form {
@@ -583,8 +629,9 @@ dialog label textarea {
   left: 50%;
   bottom: 24px;
   transform: translate(-50%, 20px);
-  background: var(--ink);
-  color: #fff;
+  z-index: 2;
+  background: #d2d5dd;
+  color: #111111;
   padding: 10px 18px;
   border-radius: 999px;
   box-shadow: var(--shadow);

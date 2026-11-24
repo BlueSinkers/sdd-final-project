@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="3.8 3.8 92.4 92.4" shape-rendering="geometricPrecision">
+  <defs>
+    <linearGradient id="bars" gradientUnits="userSpaceOnUse" x1="8" y1="0" x2="92" y2="0"><stop offset="0%" stop-color="#aeb8cc"/><stop offset="24%" stop-color="#ffffff"/><stop offset="76%" stop-color="#ffffff"/><stop offset="100%" stop-color="#aeb8cc"/></linearGradient>
+    <radialGradient id="sphere" cx="50%" cy="46%" r="82%"><stop offset="0%" stop-color="#17191e"/><stop offset="64%" stop-color="#0a0c0f"/><stop offset="100%" stop-color="#040506"/></radialGradient>
+    <linearGradient id="rim" gradientUnits="userSpaceOnUse" x1="8" y1="92" x2="92" y2="8"><stop offset="0%" stop-color="#ffffff"/><stop offset="45%" stop-color="#aeb8cc"/><stop offset="100%" stop-color="#828c9e"/></linearGradient>
+  </defs>
+  <circle cx="50" cy="50" r="45" fill="url(#sphere)"/>
+  <circle cx="50" cy="50" r="45" fill="none" stroke="url(#rim)" stroke-width="2.4"/>
+  <rect x="8.00" y="45.82" width="4.8" height="8.36" rx="2.40" fill="url(#bars)"/><rect x="17.90" y="42.02" width="4.8" height="15.96" rx="2.40" fill="url(#bars)"/><rect x="27.80" y="37.84" width="4.8" height="24.32" rx="2.40" fill="url(#bars)"/><rect x="37.70" y="34.04" width="4.8" height="31.92" rx="2.40" fill="url(#bars)"/><rect x="47.60" y="31.00" width="4.8" height="38.00" rx="2.40" fill="url(#bars)"/><rect x="57.50" y="34.04" width="4.8" height="31.92" rx="2.40" fill="url(#bars)"/><rect x="67.40" y="37.84" width="4.8" height="24.32" rx="2.40" fill="url(#bars)"/><rect x="77.30" y="42.02" width="4.8" height="15.96" rx="2.40" fill="url(#bars)"/><rect x="87.20" y="45.82" width="4.8" height="8.36" rx="2.40" fill="url(#bars)"/>
+</svg>
