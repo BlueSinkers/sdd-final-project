@@ -39,7 +39,7 @@ By our Definition of Done an item is Done only when it is merged to `main` and d
 - [x] First deploy green; live URL in the README.
 - [x] Each query in `infra/monitoring/` run against real logs; dashboard installed (workbook **Thrift-Swap Board** in `rg-sdd-3b-g1`).
 - [x] Roles, reviews and retrospective agreements filled in for all three sprints.
-- [x] Tagged `submission` (commit `ca5e245`); merge this PR to `main`, then submit the live URL + SHA on Blackboard.
+- [x] Tagged `submission` (commit `c24060c`); merge this PR to `main`, then submit the live URL + SHA on Blackboard.
 
 ## Items not done
 
